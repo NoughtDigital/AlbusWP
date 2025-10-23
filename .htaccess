@@ -1,0 +1,6 @@
+# Protect debug log from public access
+<Files "albus-debug.log">
+    Order allow,deny
+    Deny from all
+</Files>
+

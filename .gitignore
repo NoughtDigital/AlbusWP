@@ -1,0 +1,17 @@
+# Composer dependencies
+/vendor/
+composer.lock
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+
+# Page Builders
+/page_builders/
