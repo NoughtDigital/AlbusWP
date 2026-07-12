@@ -60,25 +60,48 @@ class Elementor {
             if ( $m ) $children[] = $m;
         }
         
+        $settings = $el['settings'] ?? [];
+
         // Handle sections (old system)
         if ( $type === 'section' ) {
-            Logger::debug( 'Elementor: Mapping section', [ 'children_count' => count($children) ] );
-            return [ 'type' => 'section', 'style' => [], 'children' => $children ];
+            return [
+                'type'     => 'section',
+                'style'    => $this->extractStyle( $settings ),
+                'children' => $children,
+            ];
         }
         
         // Handle containers (new flexbox system)
         if ( $type === 'container' ) {
-            Logger::debug( 'Elementor: Mapping container', [ 'children_count' => count($children) ] );
-            // Treat containers like sections
-            return [ 'type' => 'section', 'style' => [], 'children' => $children ];
+            $width = $this->containerWidth( $settings );
+            // Nested containers with explicit % width behave like columns
+            if ( $width > 0 && $width < 100 && ! empty( $el['isInner'] ) ) {
+                return [
+                    'type'     => 'column',
+                    'width'    => $width,
+                    'style'    => $this->extractStyle( $settings ),
+                    'children' => $children,
+                ];
+            }
+            return [
+                'type'     => 'section',
+                'style'    => $this->extractStyle( $settings ),
+                'children' => $children,
+            ];
         }
         
         // Handle columns (old system)
         if ( $type === 'column' ) {
-            $width = intval( $el['settings']['_inline_size'] ?? 0 );
-            if ( $width <= 0 ) $width = 100;
-            Logger::debug( 'Elementor: Mapping column', [ 'width' => $width, 'children_count' => count($children) ] );
-            return [ 'type' => 'column', 'width' => $width, 'children' => $children ];
+            $width = intval( $settings['_inline_size'] ?? 0 );
+            if ( $width <= 0 ) {
+                $width = 100;
+            }
+            return [
+                'type'     => 'column',
+                'width'    => $width,
+                'style'    => $this->extractStyle( $settings ),
+                'children' => $children,
+            ];
         }
         
         // Handle widgets
@@ -103,7 +126,11 @@ class Elementor {
         // Image widget
         if ( $widgetType === 'image' ) {
             $id = intval( $el['settings']['image']['id'] ?? 0 );
-            return [ 'type' => 'image', 'id' => $id ];
+            $url = $el['settings']['image']['url'] ?? '';
+            if ( $id > 0 && $url === '' ) {
+                $url = wp_get_attachment_url( $id ) ?: '';
+            }
+            return [ 'type' => 'image', 'id' => $id, 'url' => $url ];
         }
         
         // Button widget
@@ -118,6 +145,11 @@ class Elementor {
                 }
             }
             return [ 'type' => 'button', 'text' => $text, 'url' => $url ];
+        }
+
+        // HTML widget
+        if ( $widgetType === 'html' ) {
+            return [ 'type' => 'html', 'html' => $el['settings']['html'] ?? '' ];
         }
         
         // Icon-box widget (title + description + icon)
@@ -310,5 +342,35 @@ class Elementor {
         ]);
         
         return null;
+    }
+
+    private function extractStyle( array $settings ) : array {
+        $style = [];
+        if ( ! empty( $settings['_padding'] ) ) {
+            $style['padding'] = $settings['_padding'];
+        }
+        if ( ! empty( $settings['_margin'] ) ) {
+            $style['margin'] = $settings['_margin'];
+        }
+        if ( ! empty( $settings['_css_classes'] ) ) {
+            $style['class'] = $settings['_css_classes'];
+        }
+        if ( ! empty( $settings['_element_id'] ) ) {
+            $style['id'] = $settings['_element_id'];
+        }
+        if ( ! empty( $settings['background_color'] ) ) {
+            $style['background-color'] = $settings['background_color'];
+        }
+        return $style;
+    }
+
+    private function containerWidth( array $settings ) : int {
+        if ( isset( $settings['width']['size'] ) ) {
+            return (int) round( floatval( $settings['width']['size'] ) );
+        }
+        if ( isset( $settings['_inline_size'] ) ) {
+            return intval( $settings['_inline_size'] );
+        }
+        return 0;
     }
 }

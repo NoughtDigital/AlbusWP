@@ -40,44 +40,77 @@
 
   // Row template
   function row(item) {
-    var debugBtn = "";
-    if (item.source === "elementor") {
-      debugBtn =
-        '<button class="button debug-elementor" data-id="' +
-        item.id +
-        '" style="background:#ffa500;color:white;">Debug Data</button> ';
-    }
+    var debugBtn =
+      '<button class="button debug-raw" data-id="' +
+      item.id +
+      '" style="background:#ffa500;color:white;">Debug Data</button> ';
 
     var proBadge = item.requires_pro
       ? ' <span style="background:#ff6b35;color:white;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:bold;margin-left:5px;">PRO</span>'
       : "";
 
-    // Disable buttons if requires PRO and not PRO version
-    var gutenbergBtn =
-      '<button class="button preview" data-id="' +
-      item.id +
-      '" data-target="gutenberg">Preview → Gutenberg</button> ';
-    gutenbergBtn +=
-      '<button class="button convert" data-id="' +
-      item.id +
-      '" data-target="gutenberg">→ Gutenberg</button> ';
+    var targets = ["gutenberg", "wpbakery", "elementor", "bricks"];
+    var labels = {
+      gutenberg: "Gutenberg",
+      wpbakery: "WPBakery",
+      elementor: "Elementor",
+      bricks: "Bricks",
+    };
 
-    var bricksBtn =
-      '<button class="button preview pro-feature" data-id="' +
-      item.id +
-      '" data-target="bricks" title="Requires AlbusWP PRO">Preview → Bricks 🔒</button> ';
-    bricksBtn +=
-      '<button class="button button-primary convert pro-feature" data-id="' +
-      item.id +
-      '" data-target="bricks" title="Requires AlbusWP PRO">→ Bricks 🔒</button>';
+    // Match albus_is_conversion_allowed() free paths
+    var freePaths = {
+      wpbakery: ["gutenberg"],
+      divi: ["gutenberg"],
+      kirki: ["gutenberg"],
+      classic: ["gutenberg"],
+      gutenberg: ["bricks", "wpbakery"],
+    };
 
-    // If source requires PRO, disable all buttons
-    if (item.requires_pro) {
-      gutenbergBtn =
-        '<button class="button pro-feature" disabled title="Requires AlbusWP PRO">Preview → Gutenberg 🔒</button> ';
-      gutenbergBtn +=
-        '<button class="button pro-feature" disabled title="Requires AlbusWP PRO">→ Gutenberg 🔒</button> ';
-    }
+    var buttons = "";
+    targets.forEach(function (target) {
+      if (target === item.source) {
+        return; // skip same-source conversion
+      }
+      var allowedFree =
+        freePaths[item.source] &&
+        freePaths[item.source].indexOf(target) !== -1;
+      var isPro = !Albus.isPro && !allowedFree;
+      var label = labels[target];
+      var proClass = isPro ? " pro-feature" : "";
+      var lock = isPro ? " [PRO]" : "";
+      var title = isPro ? ' title="Requires AlbusWP PRO"' : "";
+      var primary = target === "bricks" ? " button-primary" : "";
+
+      buttons +=
+        '<button class="button preview' +
+        proClass +
+        '" data-id="' +
+        item.id +
+        '" data-target="' +
+        target +
+        '"' +
+        title +
+        (isPro ? " disabled" : "") +
+        ">Preview → " +
+        label +
+        lock +
+        "</button> ";
+      buttons +=
+        '<button class="button convert' +
+        primary +
+        proClass +
+        '" data-id="' +
+        item.id +
+        '" data-target="' +
+        target +
+        '"' +
+        title +
+        (isPro ? " disabled" : "") +
+        ">Draft → " +
+        label +
+        lock +
+        "</button> ";
+    });
 
     return (
       '<div class="albus-card" data-post-id="' +
@@ -94,8 +127,7 @@
       "</div>" +
       '<div class="albus-actions-group">' +
       debugBtn +
-      gutenbergBtn +
-      bricksBtn +
+      buttons +
       "</div></div>"
     );
   }
@@ -172,12 +204,12 @@
           html += '<hr style="margin:1rem 0;">';
           html += "<p><strong>Upgrade to PRO for:</strong></p>";
           html += '<ul style="margin:0.5rem 0;">';
-          html += "<li>✨ <strong>Unlimited</strong> scans & conversions</li>";
-          html += "<li>✨ Convert FROM Elementor & Divi</li>";
-          html += "<li>✨ Convert TO Bricks Builder</li>";
-          html += "<li>✨ <strong>Bulk conversion</strong> (one-click)</li>";
-          html += "<li>✨ Advanced style mapping</li>";
-          html += "<li>✨ Priority support</li>";
+          html += "<li><strong>Unlimited</strong> scans & conversions</li>";
+          html += "<li>Convert FROM Elementor & Divi</li>";
+          html += "<li>Convert TO Bricks Builder</li>";
+          html += "<li><strong>Bulk conversion</strong> (one-click)</li>";
+          html += "<li>Advanced style mapping</li>";
+          html += "<li>Priority support</li>";
           html += "</ul>";
           html +=
             '<p style="margin-top:1rem;"><a href="' +
@@ -220,7 +252,7 @@
           html +=
             "<li>✅ <strong>WPBakery</strong> (FREE) - looks for <code>[vc_row]</code> shortcodes</li>";
           html +=
-            "<li>✨ <strong>Elementor</strong> (PRO) - looks for <code>_elementor_data</code> meta</li>";
+            "<li><strong>Elementor</strong> (PRO) - looks for <code>_elementor_data</code> meta</li>";
           html += "</ul>";
           html +=
             '<p>If you have Elementor pages, <a href="' +
@@ -240,7 +272,9 @@
 
           // Disable bulk buttons for FREE users
           if (!resp.can_bulk) {
-            $("#albus-bulk-gutenberg, #albus-bulk-bricks")
+            $(
+              "#albus-bulk-gutenberg, #albus-bulk-bricks, #albus-bulk-wpbakery, #albus-bulk-elementor"
+            )
               .prop("disabled", true)
               .attr("title", "Bulk conversion requires AlbusWP PRO")
               .addClass("pro-feature");
@@ -252,27 +286,37 @@
       });
   });
 
-  // Debug Elementor data
-  $("#albus-results").on("click", ".debug-elementor", function () {
+  // Debug raw builder data
+  $("#albus-results").on("click", ".debug-raw", function () {
     var id = $(this).data("id");
 
     $.ajax({
-      url: Albus.rest + "/debug-elementor/" + id,
+      url: Albus.rest + "/debug-raw/" + id,
       method: "GET",
       headers: { "X-WP-Nonce": Albus.nonce },
     })
       .then(function (resp) {
-        console.log("Elementor Debug Data:", resp);
+        console.log("Raw Debug Data:", resp);
 
         var infoHtml = "<p><strong>Post ID:</strong> " + resp.post_id + "</p>";
-        infoHtml +=
-          "<p><strong>Meta Exists:</strong> " +
-          (resp.meta_exists ? "Yes" : "No") +
-          "</p>";
-        infoHtml += "<p><strong>Data Type:</strong> " + resp.data_type + "</p>";
-        infoHtml +=
-          "<p><strong>Element Count:</strong> " + resp.data_count + "</p>";
-        if (resp.json_error !== "No error") {
+        if (resp.source) {
+          infoHtml += "<p><strong>Source:</strong> " + resp.source + "</p>";
+        }
+        if (typeof resp.meta_exists !== "undefined") {
+          infoHtml +=
+            "<p><strong>Meta Exists:</strong> " +
+            (resp.meta_exists ? "Yes" : "No") +
+            "</p>";
+        }
+        if (resp.data_type) {
+          infoHtml +=
+            "<p><strong>Data Type:</strong> " + resp.data_type + "</p>";
+        }
+        if (typeof resp.data_count !== "undefined") {
+          infoHtml +=
+            "<p><strong>Element Count:</strong> " + resp.data_count + "</p>";
+        }
+        if (resp.json_error && resp.json_error !== "No error") {
           infoHtml +=
             '<p style="color:red;"><strong>JSON Error:</strong> ' +
             resp.json_error +
@@ -281,9 +325,13 @@
 
         $(".albus-preview-info").html(infoHtml);
         $(".albus-preview-body code").text(
-          JSON.stringify(resp.raw_data, null, 2)
+          JSON.stringify(
+            resp.raw_data !== undefined ? resp.raw_data : resp,
+            null,
+            2
+          )
         );
-        $("#albus-preview-modal h2").text("Debug: Elementor Data");
+        $("#albus-preview-modal h2").text("Debug: Raw Builder Data");
         $("#albus-confirm-convert").hide();
         $("#albus-preview-modal").fadeIn();
       })
@@ -296,7 +344,7 @@
   $("#albus-results").on("click", ".pro-feature", function (e) {
     e.preventDefault();
     alert(
-      "This feature requires AlbusWP PRO.\n\n✨ Convert FROM Elementor\n✨ Convert TO Bricks Builder\n✨ Priority support\n\nUpgrade to unlock!"
+      "This feature requires AlbusWP PRO.\n\nUnlock all conversion paths between Gutenberg, WPBakery, Elementor, and Bricks.\n\nUpgrade to unlock!"
     );
     return false;
   });
@@ -372,8 +420,50 @@
     performConversion(id, target);
   });
 
+  function getConversionMode() {
+    if ($("#albus-inplace-mode").is(":checked")) {
+      return "inplace";
+    }
+    return "safe";
+  }
+
+  $("#albus-inplace-mode").on("change", function () {
+    var inplace = $(this).is(":checked");
+    $("#albus-confirm-convert").text(
+      inplace ? "Overwrite live page" : "Create safe draft"
+    );
+    if (inplace) {
+      alert(
+        "In-place mode is dangerous on live sites.\n\nSafe mode (draft copies) is strongly recommended.\nIn-place requires typing OVERWRITE LIVE for every conversion."
+      );
+    }
+  });
+
   // Perform single conversion
   function performConversion(id, target) {
+    var mode = getConversionMode();
+    var confirmInplace = "";
+
+    if (mode === "inplace") {
+      confirmInplace = window.prompt(
+        "WARNING: This will OVERWRITE the live published page/post.\n\nType OVERWRITE LIVE to continue, or Cancel to abort.\n\nRecommended: uncheck in-place mode and use a safe draft instead."
+      );
+      if (confirmInplace !== "OVERWRITE LIVE") {
+        alert("In-place conversion cancelled. Live page was not changed.");
+        return;
+      }
+    } else {
+      if (
+        !confirm(
+          "Create a DRAFT copy of this page and convert the draft to " +
+            target +
+            "?\n\nThe live original will NOT be changed."
+        )
+      ) {
+        return;
+      }
+    }
+
     var card = $('.albus-card[data-post-id="' + id + '"]');
     var btn = card.find('.convert[data-target="' + target + '"]');
 
@@ -383,12 +473,17 @@
       url: Albus.rest + "/convert",
       method: "POST",
       headers: { "X-WP-Nonce": Albus.nonce },
-      data: { post_id: id, target: target },
+      data: {
+        post_id: id,
+        target: target,
+        mode: mode,
+        confirm_inplace: confirmInplace,
+      },
     })
       .then(function (resp) {
         console.log("Conversion response:", resp);
         if (resp.ok) {
-          btn.text("Done ✓").removeClass("button-primary");
+          btn.text("Done").removeClass("button-primary");
 
           var successMsg =
             '<div class="albus-success">' +
@@ -398,21 +493,38 @@
           if (resp.details) {
             successMsg += "<small>" + resp.details + "</small><br>";
           }
+          if (resp.original_untouched) {
+            successMsg +=
+              "<small><strong>Live original #" +
+              resp.post_id +
+              " was not modified.</strong></small><br>";
+          }
+          if (resp.draft_id) {
+            successMsg +=
+              "<small>Draft ID: #" + resp.draft_id + "</small><br>";
+          }
           if (resp.edit_url) {
             successMsg +=
               '<a href="' +
               resp.edit_url +
-              '" target="_blank" style="margin-top:4px;display:inline-block;">Edit Post</a> ';
+              '" target="_blank" style="margin-top:4px;display:inline-block;" class="button button-primary">Edit draft</a> ';
           }
-          successMsg +=
-            '<button class="button restore-post" data-id="' +
-            id +
-            '" style="margin-top:4px;">Restore Backup</button>';
+          if (resp.preview_url) {
+            successMsg +=
+              '<a href="' +
+              resp.preview_url +
+              '" target="_blank" style="margin-top:4px;display:inline-block;" class="button">Preview draft</a> ';
+          }
+          if (mode === "inplace") {
+            successMsg +=
+              '<button class="button restore-post" data-id="' +
+              id +
+              '" style="margin-top:4px;">Restore live backup</button>';
+          }
           successMsg += "</div>";
 
           card.append(successMsg);
 
-          // Update UI if limit reached
           if (
             resp.conversions_remaining !== undefined &&
             resp.conversions_remaining === 0
@@ -421,53 +533,22 @@
               '<div class="albus-warning-box" style="margin-top:1rem;">';
             limitMsg += "<strong>Free Limit Reached!</strong>";
             limitMsg +=
-              "<p>You've used all 10 free conversions. <a href=\"" +
+              "<p>You've used all free conversions. <a href=\"" +
               upgradeUrl +
-              '" class="button button-primary">Upgrade to PRO</a> for unlimited conversions!</p>';
+              '" class="button button-primary">Upgrade to PRO</a></p>';
             limitMsg += "</div>";
             $("#albus-results").prepend(limitMsg);
           }
         } else {
           btn.text("Failed").css("background", "#dc3545");
-
-          var errorMsg = '<div class="albus-error">';
-
-          // Special handling for limit reached
-          if (resp.limit_reached) {
-            errorMsg += "<strong>⚠️ Free Limit Reached</strong><br>";
-            errorMsg += resp.message + "<br>";
-            errorMsg +=
-              '<a href="' +
-              upgradeUrl +
-              '" class="button button-primary" style="margin-top:8px;">Upgrade to PRO</a>';
-          } else {
-            errorMsg +=
-              "<strong>Error:</strong> " +
-              (resp.message || "Unknown error") +
-              "<br>";
-            if (resp.error_details) {
-              errorMsg += "<small>" + resp.error_details + "</small>";
-            }
-          }
-
-          errorMsg += "</div>";
-
-          card.append(errorMsg);
-
-          if (!resp.limit_reached) {
-            alert("Conversion Failed\n\n" + (resp.message || "Unknown error"));
-          }
+          alert("Conversion failed: " + (resp.message || "Unknown error"));
         }
       })
       .fail(function (xhr, status, error) {
-        console.error("AJAX error:", xhr, status, error);
-        btn.text("Failed").css("background", "#dc3545");
-
+        btn.prop("disabled", false).text("Draft → " + target);
         var errorMsg =
           '<div class="albus-error">' +
-          "<strong>Network Error:</strong> " +
-          error +
-          "<br>" +
+          "<strong>Network Error</strong><br>" +
           "<small>Check browser console and WordPress debug.log for details.</small>" +
           "</div>";
 
@@ -486,18 +567,18 @@
     // Check if bulk is allowed (will be disabled in UI, but double-check)
     if ($("#albus-bulk-" + target.toLowerCase()).hasClass("pro-feature")) {
       alert(
-        "Bulk conversion requires AlbusWP PRO.\n\n✨ Unlimited conversions\n✨ One-click bulk processing\n✨ Priority support\n\nUpgrade to unlock!"
+        "Bulk conversion requires AlbusWP PRO.\n\nUnlimited conversions\nOne-click bulk processing\nPriority support\n\nUpgrade to unlock!"
       );
       return;
     }
 
     if (
       !confirm(
-        "Convert all " +
+        "Create DRAFT copies of all " +
           scanResults.length +
-          " posts to " +
+          " posts and convert those drafts to " +
           target +
-          "?\n\nThis will update all posts in your database."
+          "?\n\nLive originals will NOT be changed. Bulk never overwrites live pages."
       )
     ) {
       return;
@@ -508,14 +589,18 @@
     var completed = 0;
 
     $("#albus-bulk-progress").show();
-    $("#albus-bulk-gutenberg, #albus-bulk-bricks").prop("disabled", true);
+    $(
+      "#albus-bulk-gutenberg, #albus-bulk-bricks, #albus-bulk-wpbakery, #albus-bulk-elementor"
+    ).prop("disabled", true);
 
     function convertNext(index) {
       if (index >= postIds.length) {
         $(".albus-progress-text").text(
           "Complete! Converted " + completed + " of " + total + " posts."
         );
-        $("#albus-bulk-gutenberg, #albus-bulk-bricks").prop("disabled", false);
+        $(
+          "#albus-bulk-gutenberg, #albus-bulk-bricks, #albus-bulk-wpbakery, #albus-bulk-elementor"
+        ).prop("disabled", false);
         setTimeout(function () {
           $("#albus-bulk-progress").fadeOut();
         }, 3000);
@@ -534,7 +619,7 @@
         url: Albus.rest + "/convert",
         method: "POST",
         headers: { "X-WP-Nonce": Albus.nonce },
-        data: { post_id: postId, target: target },
+        data: { post_id: postId, target: target, mode: "safe" },
       }).always(function (resp) {
         if (resp && resp.ok) {
           completed++;
@@ -545,7 +630,7 @@
         if (resp && resp.ok) {
           card
             .find('.convert[data-target="' + target + '"]')
-            .text("Done ✓")
+            .text("Done")
             .removeClass("button-primary");
         } else {
           card
@@ -563,6 +648,14 @@
 
   $("#albus-bulk-gutenberg").on("click", function () {
     bulkConvert("gutenberg");
+  });
+
+  $("#albus-bulk-wpbakery").on("click", function () {
+    bulkConvert("wpbakery");
+  });
+
+  $("#albus-bulk-elementor").on("click", function () {
+    bulkConvert("elementor");
   });
 
   $("#albus-bulk-bricks").on("click", function () {

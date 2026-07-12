@@ -82,17 +82,42 @@ class Gutenberg {
                 $url = $attrs['url'] ?? '';
                 return [ 'type' => 'image', 'id' => intval( $id ), 'url' => $url ];
             
-            case 'core/button':
             case 'core/buttons':
-                // Parse button from HTML
-                $text = 'Button';
-                $url = '#';
-                
-                if ( preg_match( '/<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)<\/a>/is', $innerHTML, $matches ) ) {
-                    $url = $matches[1];
-                    $text = strip_tags( $matches[2] );
+                // Flatten buttons wrapper into individual button nodes
+                $buttons = [];
+                foreach ( $innerBlocks as $inner ) {
+                    $mapped = $this->processBlock( $inner );
+                    if ( $mapped ) {
+                        if ( isset( $mapped[0] ) && is_array( $mapped[0] ) ) {
+                            $buttons = array_merge( $buttons, $mapped );
+                        } else {
+                            $buttons[] = $mapped;
+                        }
+                    }
                 }
-                
+                if ( empty( $buttons ) ) {
+                    // Fallback: parse first link from HTML
+                    $text = 'Button';
+                    $url = '#';
+                    if ( preg_match( '/<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)<\/a>/is', $innerHTML, $matches ) ) {
+                        $url = $matches[1];
+                        $text = strip_tags( $matches[2] );
+                    }
+                    return [ 'type' => 'button', 'text' => $text, 'url' => $url ];
+                }
+                return $buttons;
+
+            case 'core/button':
+                $text = $attrs['text'] ?? 'Button';
+                $url = $attrs['url'] ?? '#';
+                if ( ( $text === 'Button' || $url === '#' ) && preg_match( '/<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)<\/a>/is', $innerHTML, $matches ) ) {
+                    if ( $url === '#' ) {
+                        $url = $matches[1];
+                    }
+                    if ( $text === 'Button' ) {
+                        $text = strip_tags( $matches[2] );
+                    }
+                }
                 return [ 'type' => 'button', 'text' => $text, 'url' => $url ];
             
             case 'core/list':
@@ -113,8 +138,11 @@ class Gutenberg {
                 return [ 'type' => 'html', 'html' => '<hr />' ];
             
             case 'core/spacer':
-                $height = $attrs['height'] ?? 50;
-                return [ 'type' => 'html', 'html' => '<div style="height:' . intval( $height ) . 'px;"></div>' ];
+                $height = $attrs['height'] ?? '50px';
+                if ( is_numeric( $height ) ) {
+                    $height = intval( $height ) . 'px';
+                }
+                return [ 'type' => 'html', 'html' => '<div style="height:' . esc_attr( (string) $height ) . ';"></div>' ];
             
             // Container blocks
             case 'core/group':
@@ -130,12 +158,17 @@ class Gutenberg {
                 $width = $attrs['width'] ?? 100;
                 $children = $this->processBlocks( $innerBlocks );
                 
-                // Convert width string (e.g., "33.33%") to integer
+                // Convert width string (e.g., "33.33%") to integer percent
                 if ( is_string( $width ) && strpos( $width, '%' ) !== false ) {
-                    $width = floatval( $width );
+                    $width = (int) round( floatval( $width ) );
+                } else {
+                    $width = intval( $width );
+                }
+                if ( $width <= 0 ) {
+                    $width = 100;
                 }
                 
-                return [ 'type' => 'column', 'width' => intval( $width ), 'children' => $children ];
+                return [ 'type' => 'column', 'width' => $width, 'children' => $children ];
             
             // Media blocks
             case 'core/gallery':

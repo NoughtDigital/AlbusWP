@@ -11,9 +11,15 @@ use Albus\Extract\Gutenberg;
 use Albus\Extract\Bricks as BricksExtractor;
 use Albus\Convert\ToGutenberg;
 use Albus\Convert\ToBricks;
+use Albus\Convert\ToWPBakery;
+use Albus\Convert\ToElementor;
 use Albus\Import\GutenbergWriter;
 use Albus\Import\BricksWriter;
+use Albus\Import\WPBakeryWriter;
+use Albus\Import\ElementorWriter;
 use Albus\Util\Logger;
+use Albus\Util\Backup;
+use Albus\Util\SafeDuplicate;
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
@@ -59,12 +65,28 @@ class AdminPage {
             </div>
             
             <div class="albus-tab-content" id="tab-scan">
+                <div class="albus-warning-box" style="border-left:4px solid #00a32a;background:#edfaef;">
+                    <h3 style="margin-top:0;">Safe mode (default)</h3>
+                    <p><strong>Albus never overwrites your live page unless you explicitly force it.</strong></p>
+                    <ul>
+                        <li>Conversion creates a <strong>draft duplicate</strong> of each page/post</li>
+                        <li>The original stays published and untouched</li>
+                        <li>You review the draft in Gutenberg / Elementor / Bricks, then cut over manually when ready</li>
+                        <li>Every write is snapshotted; in-place mode also archives the original to a site archive log</li>
+                    </ul>
+                </div>
+
                 <div class="albus-info-box">
-                    <p><strong>What does Albus do?</strong> Albus converts legacy page builder content (WPBakery, Elementor) into modern formats (Gutenberg blocks or Bricks Builder).</p>
-                    <p><strong>Safety First:</strong> All conversions create automatic backups. You can restore any post at any time from the Backups tab.</p>
+                    <p><strong>What does Albus do?</strong> Converts page builder content between Gutenberg, WPBakery, Elementor, and Bricks — safely via draft copies by default.</p>
                     <?php if ( ! ALBUS_IS_PRO ) : ?>
-                    <p><strong>FREE Version:</strong> You can scan up to <?php echo ALBUS_FREE_SCAN_LIMIT; ?> pages and convert up to <?php echo ALBUS_FREE_CONVERT_LIMIT; ?> pages (WPBakery → Gutenberg). <a href="<?php echo esc_url( albus_get_upgrade_url() ); ?>" class="button button-primary">Upgrade to PRO</a> for unlimited access.</p>
+                    <p><strong>FREE Version:</strong> Scan up to <?php echo (int) ALBUS_FREE_SCAN_LIMIT; ?> pages and convert up to <?php echo (int) ALBUS_FREE_CONVERT_LIMIT; ?> pages. <a href="<?php echo esc_url( albus_get_upgrade_url() ); ?>" class="button button-primary">Upgrade to PRO</a></p>
                     <?php endif; ?>
+                    <p style="margin-bottom:0;">
+                        <label>
+                            <input type="checkbox" id="albus-inplace-mode" value="1" />
+                            <strong>Dangerous:</strong> overwrite live posts in place (requires typing OVERWRITE LIVE)
+                        </label>
+                    </p>
                 </div>
                 
                 <div class="albus-actions">
@@ -75,9 +97,12 @@ class AdminPage {
                 </div>
                 
                 <div id="albus-bulk-actions" style="display:none;margin-top:1rem;">
-                    <h3>Bulk Actions</h3>
-                    <button class="button" id="albus-bulk-gutenberg">Convert All to Gutenberg</button>
-                    <button class="button button-primary" id="albus-bulk-bricks">Convert All to Bricks</button>
+                    <h3>Bulk Actions (safe drafts)</h3>
+                    <p class="description">Bulk always creates draft copies. Live pages are not changed.</p>
+                    <button class="button" id="albus-bulk-gutenberg">Draft-convert all → Gutenberg</button>
+                    <button class="button" id="albus-bulk-wpbakery">Draft-convert all → WPBakery</button>
+                    <button class="button" id="albus-bulk-elementor">Draft-convert all → Elementor</button>
+                    <button class="button button-primary" id="albus-bulk-bricks">Draft-convert all → Bricks</button>
                     <div id="albus-bulk-progress" style="display:none;margin-top:1rem;">
                         <div class="albus-progress-bar">
                             <div class="albus-progress-fill"></div>
@@ -105,52 +130,43 @@ class AdminPage {
             
             <div class="albus-tab-content" id="tab-help" style="display:none;">
                 <div class="albus-info-box">
-                    <h3>How to Use Albus</h3>
+                    <h3>How to Use Albus (safe workflow)</h3>
                     <ol>
-                        <li><strong>Scan:</strong> Click "Scan Site" to find all posts using WPBakery or Elementor</li>
-                        <li><strong>Preview (Optional):</strong> Click "Preview" to see the converted content before applying</li>
-                        <li><strong>Convert:</strong> Click the conversion button for your target format (Gutenberg or Bricks)</li>
-                        <li><strong>Review:</strong> Check the converted post using the "Edit Post" link</li>
-                        <li><strong>Restore (if needed):</strong> Go to Backups tab to restore any post</li>
+                        <li><strong>Scan:</strong> Find pages using Gutenberg, WPBakery, Elementor, Bricks, Divi, or Classic</li>
+                        <li><strong>Preview:</strong> Inspect converted output without writing anything</li>
+                        <li><strong>Draft convert:</strong> Creates a draft copy — the live page stays untouched</li>
+                        <li><strong>Review:</strong> Open the draft in the target builder and check the layout</li>
+                        <li><strong>Cut over manually:</strong> When happy, publish the draft / replace the original yourself</li>
                     </ol>
+                    <p>In-place overwrite is optional, off by default, and requires typing <code>OVERWRITE LIVE</code>.</p>
                 </div>
                 
                 <div class="albus-info-box">
                     <h3>Bulk Conversion</h3>
-                    <p>After scanning, you'll see bulk conversion buttons to convert all posts at once. This is useful for migrating entire sites.</p>
-                    <p><strong>Tip:</strong> Test on a few posts first before doing a bulk conversion.</p>
+                    <p>After scanning, use bulk actions to convert all listed posts to one target. Test a few posts first.</p>
                 </div>
                 
                 <?php if ( ! ALBUS_IS_PRO ) : ?>
                 <div class="albus-info-box" style="background:#f0f9ff;border-left:4px solid #3b82f6;">
                     <h3>Upgrade to PRO</h3>
-                    <p><strong>Remove all limits and unlock premium features!</strong></p>
-                    <p>AlbusWP PRO unlocks:</p>
+                    <p><strong>Remove limits and unlock every conversion path.</strong></p>
                     <ul>
-                        <li>✨ <strong>Unlimited Scans & Conversions</strong> - No more 10-page limits</li>
-                        <li>✨ <strong>Bulk Conversion</strong> - Convert all pages with one click</li>
-                        <li>✨ <strong>Elementor Support</strong> - Convert from the most popular page builder</li>
-                        <li>✨ <strong>Divi Support</strong> - Support for Elegant Themes' Divi Builder</li>
-                        <li>✨ <strong>Bricks Builder</strong> - Output to the modern Bricks Builder</li>
-                        <li>✨ <strong>Advanced Style Mapping</strong> - Better CSS & typography conversion</li>
-                        <li>✨ <strong>Multi-site Support</strong> - Use on unlimited sites</li>
-                        <li>✨ <strong>Priority Support</strong> - Get help when you need it</li>
-                        <li>✨ <strong>Future Features</strong> - Early access to Oxygen, Beaver Builder, and more</li>
+                        <li><strong>Unlimited</strong> scans and conversions</li>
+                        <li><strong>Bulk conversion</strong> for whole sites</li>
+                        <li>Elementor and Bricks as sources and targets</li>
+                        <li>Full bidirectional paths between all four builders</li>
+                        <li>Priority support</li>
                     </ul>
-                    <p style="font-size:18px;margin:1rem 0;">
-                        <strong>Try it risk-free with our 30-day money-back guarantee!</strong>
-                    </p>
-                    <p><a href="<?php echo esc_url( albus_get_upgrade_url() ); ?>" class="button button-primary button-large" style="font-size:16px;padding:8px 24px;">Upgrade to AlbusWP PRO</a></p>
+                    <p><a href="<?php echo esc_url( albus_get_upgrade_url() ); ?>" class="button button-primary button-large">Upgrade to AlbusWP PRO</a></p>
                 </div>
                 <?php endif; ?>
                 
                 <div class="albus-warning-box">
                     <h3>Important Notes</h3>
                     <ul>
-                        <li>Conversions modify your database directly (no file downloads)</li>
-                        <li>Always backup your database before bulk conversions</li>
-                        <li>Complex layouts may need manual adjustments after conversion</li>
-                        <li>Custom CSS and JavaScript may need to be re-applied</li>
+                        <li>Conversions write directly to the database (with automatic backups)</li>
+                        <li>Always keep a full database backup before bulk migrations</li>
+                        <li>Complex layouts and custom CSS may need manual polish after conversion</li>
                     </ul>
                 </div>
                 
@@ -160,26 +176,21 @@ class AdminPage {
                         <div>
                             <strong>FREE Version:</strong>
                             <ul>
-                                <li>✅ Convert FROM WPBakery</li>
-                                <li>✅ Convert TO Gutenberg</li>
-                                <li>⚠️ Scan up to 10 pages</li>
-                                <li>⚠️ Convert up to 10 pages</li>
-                                <li>⚠️ Manual conversion (one-by-one)</li>
-                                <li>✅ Automatic backups</li>
-                                <li>✅ Restore functionality</li>
+                                <li>WPBakery / Divi / Classic / Kirki → Gutenberg</li>
+                                <li>Gutenberg → Bricks or WPBakery</li>
+                                <li>Scan up to <?php echo (int) ALBUS_FREE_SCAN_LIMIT; ?> pages</li>
+                                <li>Convert up to <?php echo (int) ALBUS_FREE_CONVERT_LIMIT; ?> pages</li>
+                                <li>Automatic backups and restore</li>
                             </ul>
                         </div>
                         <div>
                             <strong>PRO Version:</strong>
                             <ul>
-                                <li>✨ <strong>Unlimited</strong> scans & conversions</li>
-                                <li>✨ Convert FROM Elementor & Divi</li>
-                                <li>✨ Convert TO Bricks Builder</li>
-                                <li>✨ <strong>Bulk conversion</strong> (one-click)</li>
-                                <li>✨ Advanced style mapping</li>
-                                <li>✨ Multi-site support</li>
-                                <li>✨ Priority support</li>
-                                <li>✨ All FREE features included</li>
+                                <li>Unlimited scans and conversions</li>
+                                <li>All paths: Gutenberg, WPBakery, Elementor, Bricks</li>
+                                <li>Bulk conversion</li>
+                                <li>Elementor as source and target</li>
+                                <li>Priority support</li>
                             </ul>
                         </div>
                     </div>
@@ -188,11 +199,10 @@ class AdminPage {
                 <div class="albus-info-box">
                     <h3>Troubleshooting</h3>
                     <p><strong>Check the logs:</strong> <?php if ( $log_exists ) : ?><a href="<?php echo esc_url( ALBUS_URL . 'albus-debug.log' ); ?>" target="_blank">View Debug Log</a><?php else : ?>Debug log will appear after first conversion<?php endif; ?></p>
-                    <p><strong>Common issues:</strong></p>
                     <ul>
-                        <li>Bricks conversions fail? Make sure Bricks Builder plugin is installed and active</li>
-                        <li>Missing content? Check that source builder data exists on the post</li>
-                        <li>Complex layouts? May require manual adjustment after conversion</li>
+                        <li>Bricks output stores data in <code>_bricks_page_content_2</code> — open the page in the Bricks editor to verify</li>
+                        <li>Elementor output stores JSON in <code>_elementor_data</code> — CSS regenerates on next edit</li>
+                        <li>Missing content? Use Debug Data on the scan card, then Export JSON</li>
                     </ul>
                 </div>
                 
@@ -218,7 +228,7 @@ class AdminPage {
                     <pre><code></code></pre>
                 </div>
                 <div class="albus-modal-actions">
-                    <button class="button button-primary" id="albus-confirm-convert">Convert Now</button>
+                    <button class="button button-primary" id="albus-confirm-convert">Create safe draft</button>
                     <button class="button" id="albus-cancel-preview">Cancel</button>
                 </div>
             </div>
@@ -259,6 +269,13 @@ class AdminPage {
             } elseif ( $target === 'bricks' ) {
                 $json = ( new ToBricks() )->build( $neutral );
                 $preview = wp_json_encode( $json, JSON_PRETTY_PRINT );
+            } elseif ( $target === 'wpbakery' ) {
+                $preview = ( new ToWPBakery() )->render( $neutral );
+            } elseif ( $target === 'elementor' ) {
+                $json = ( new ToElementor() )->build( $neutral );
+                $preview = wp_json_encode( $json, JSON_PRETTY_PRINT );
+            } else {
+                return [ 'ok' => false, 'message' => 'Unknown target: ' . $target ];
             }
             
             return [
@@ -279,169 +296,209 @@ class AdminPage {
         }
     }
 
-    public static function convert_post( int $post_id, string $target ) {
-        Logger::info( 'Starting conversion', [ 'post_id' => $post_id, 'target' => $target ] );
-        
+    public static function convert_post( int $post_id, string $target, string $mode = 'safe', string $confirm_inplace = '' ) {
+        Logger::info( 'Starting conversion', [
+            'post_id' => $post_id,
+            'target'  => $target,
+            'mode'    => $mode,
+        ]);
+
         try {
-            // Check conversion limits (FREE version only)
+            $mode = ( $mode === 'inplace' ) ? 'inplace' : 'safe';
+
+            if ( $mode === 'inplace' ) {
+                if ( $confirm_inplace !== 'OVERWRITE LIVE' ) {
+                    return [
+                        'ok'      => false,
+                        'message' => 'In-place overwrite blocked. Type OVERWRITE LIVE to confirm, or leave safe mode (draft duplicate) enabled.',
+                        'blocked' => true,
+                    ];
+                }
+            }
+
             if ( ! albus_can_convert() ) {
                 $limit = ALBUS_FREE_CONVERT_LIMIT;
-                Logger::warning( 'Conversion limit reached', [ 'post_id' => $post_id, 'limit' => $limit ] );
-                return [ 
-                    'ok' => false, 
-                    'message' => "Free version limit reached! You've converted {$limit} pages. Upgrade to PRO for unlimited conversions.",
-                    'requires_pro' => true,
-                    'limit_reached' => true
+                return [
+                    'ok'             => false,
+                    'message'        => "Free version limit reached! You've converted {$limit} pages. Upgrade to PRO for unlimited conversions.",
+                    'requires_pro'   => true,
+                    'limit_reached'  => true,
                 ];
             }
-            
-            // Detect source builder
+
             $source = Detector::detect_source_for_post( $post_id );
             if ( ! $source ) {
-                Logger::warning( 'No supported builder content found', [ 'post_id' => $post_id ] );
                 return [ 'ok' => false, 'message' => 'No supported builder content found.' ];
             }
-            
-            // Check if this specific conversion is allowed
+
             $allowed = albus_is_conversion_allowed( $source, $target );
             if ( ! $allowed['allowed'] ) {
-                Logger::warning( 'Conversion not allowed in current tier', [ 'post_id' => $post_id, 'source' => $source, 'target' => $target ] );
-                return [ 
-                    'ok' => false, 
-                    'message' => $allowed['message'],
-                    'requires_pro' => true 
+                return [
+                    'ok'           => false,
+                    'message'      => $allowed['message'],
+                    'requires_pro' => true,
                 ];
             }
-            
-            Logger::info( 'Detected source', [ 'post_id' => $post_id, 'source' => $source ] );
 
-            // Extract to neutral tree
+            // Extract from the ORIGINAL (always)
             $neutral = self::extract_content( $post_id, $source );
-            
             if ( empty( $neutral ) ) {
-                Logger::warning( 'Neutral tree is empty after extraction', [ 'post_id' => $post_id, 'source' => $source ] );
                 return [ 'ok' => false, 'message' => 'No content extracted from ' . $source ];
             }
 
-            // Convert to target
-            if ( $target === 'gutenberg' ) {
-                Logger::info( 'Converting to Gutenberg', [ 'post_id' => $post_id ] );
-                $markup = ( new ToGutenberg() )->render( $neutral );
-                Logger::debug( 'Gutenberg markup generated', [ 'post_id' => $post_id, 'length' => strlen($markup) ] );
-                
-                ( new GutenbergWriter() )->apply( $post_id, $markup );
-                Logger::info( 'Gutenberg conversion complete', [ 'post_id' => $post_id ] );
-                
-                // Increment conversion counter for FREE version
-                $new_count = albus_increment_conversion_count();
-                $remaining = albus_get_remaining_conversions();
-                
-                $edit_url = get_edit_post_link( $post_id, 'raw' );
-                $result = [ 
-                    'ok' => true, 
-                    'post_id' => $post_id, 
-                    'source' => $source, 
-                    'target' => $target,
-                    'message' => 'Post updated successfully. Content converted to Gutenberg blocks.',
-                    'edit_url' => $edit_url,
-                    'details' => sprintf( 'Converted %d elements from %s', count($neutral), $source ),
-                    'conversions_used' => $new_count,
-                    'conversions_remaining' => $remaining
-                ];
-                
-                // Add reminder about remaining conversions for FREE users
-                if ( ! ALBUS_IS_PRO && $remaining > 0 && $remaining <= 3 ) {
-                    $result['message'] .= " ({$remaining} free conversions remaining)";
+            $original_id = $post_id;
+            $write_id    = $post_id;
+
+            if ( $mode === 'safe' ) {
+                // Snapshot original for audit without modifying it
+                Backup::snapshot( $original_id, $target, 'safe-original-audit' );
+
+                $draft_id = SafeDuplicate::create( $original_id, $target );
+                if ( is_wp_error( $draft_id ) ) {
+                    return [
+                        'ok'      => false,
+                        'message' => 'Could not create safe draft: ' . $draft_id->get_error_message(),
+                    ];
                 }
-                
-                return $result;
-                
-            } elseif ( $target === 'bricks' ) {
-                Logger::info( 'Converting to Bricks', [ 'post_id' => $post_id ] );
-                $json = ( new ToBricks() )->build( $neutral );
-                Logger::debug( 'Bricks JSON generated', [ 'post_id' => $post_id, 'structure' => array_keys($json) ] );
-                
-                ( new BricksWriter() )->apply( $post_id, $json );
-                Logger::info( 'Bricks conversion complete', [ 'post_id' => $post_id ] );
-                
-                // Increment conversion counter for FREE version
-                $new_count = albus_increment_conversion_count();
-                $remaining = albus_get_remaining_conversions();
-                
-                $edit_url = get_edit_post_link( $post_id, 'raw' );
-                $result = [ 
-                    'ok' => true, 
-                    'post_id' => $post_id, 
-                    'source' => $source, 
-                    'target' => $target,
-                    'message' => 'Post updated successfully. Content converted to Bricks Builder.',
-                    'edit_url' => $edit_url,
-                    'details' => sprintf( 'Converted %d elements from %s', count($neutral), $source ),
-                    'conversions_used' => $new_count,
-                    'conversions_remaining' => $remaining
-                ];
-                
-                return $result;
-                
+                $write_id = (int) $draft_id;
             } else {
-                Logger::error( 'Unknown target specified', [ 'post_id' => $post_id, 'target' => $target ] );
+                // Extra archive before touching live content
+                Backup::archive_original( $original_id, $target );
+                Backup::snapshot( $original_id, $target, 'inplace' );
+            }
+
+            // Apply conversion to write target only
+            if ( $target === 'gutenberg' ) {
+                $markup = ( new ToGutenberg() )->render( $neutral );
+                ( new GutenbergWriter() )->apply( $write_id, $markup, $mode );
+                $message = ( $mode === 'safe' )
+                    ? 'Safe draft created with Gutenberg blocks. Live original was not changed.'
+                    : 'Live post overwritten with Gutenberg blocks (in-place).';
+            } elseif ( $target === 'bricks' ) {
+                $elements = ( new ToBricks() )->build( $neutral );
+                ( new BricksWriter() )->apply( $write_id, $elements, $mode );
+                $message = ( $mode === 'safe' )
+                    ? 'Safe draft created for Bricks. Live original was not changed.'
+                    : 'Live post overwritten with Bricks data (in-place).';
+            } elseif ( $target === 'wpbakery' ) {
+                $shortcodes = ( new ToWPBakery() )->render( $neutral );
+                ( new WPBakeryWriter() )->apply( $write_id, $shortcodes, $mode );
+                $message = ( $mode === 'safe' )
+                    ? 'Safe draft created with WPBakery shortcodes. Live original was not changed.'
+                    : 'Live post overwritten with WPBakery shortcodes (in-place).';
+            } elseif ( $target === 'elementor' ) {
+                $tree = ( new ToElementor() )->build( $neutral );
+                ( new ElementorWriter() )->apply( $write_id, $tree, $mode );
+                $message = ( $mode === 'safe' )
+                    ? 'Safe draft created for Elementor. Live original was not changed.'
+                    : 'Live post overwritten with Elementor data (in-place).';
+            } else {
                 return [ 'ok' => false, 'message' => 'Unknown target: ' . $target ];
             }
-            
-        } catch ( \Exception $e ) {
-            Logger::error( 'Conversion failed with exception', [ 
-                'post_id' => $post_id, 
-                'target' => $target,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+
+            Backup::log_conversion([
+                'event'       => 'convert',
+                'original_id' => $original_id,
+                'write_id'    => $write_id,
+                'source'      => $source,
+                'target'      => $target,
+                'mode'        => $mode,
+                'date'        => current_time( 'mysql' ),
             ]);
-            return [ 
-                'ok' => false, 
-                'message' => 'Conversion failed: ' . $e->getMessage(),
-                'error_details' => $e->getMessage()
+
+            $new_count  = albus_increment_conversion_count();
+            $remaining  = albus_get_remaining_conversions();
+            $edit_url   = get_edit_post_link( $write_id, 'raw' );
+            $view_url   = get_preview_post_link( $write_id );
+
+            $result = [
+                'ok'                    => true,
+                'mode'                  => $mode,
+                'post_id'               => $original_id,
+                'draft_id'              => ( $mode === 'safe' ) ? $write_id : null,
+                'write_id'              => $write_id,
+                'source'                => $source,
+                'target'                => $target,
+                'message'               => $message,
+                'edit_url'              => $edit_url,
+                'preview_url'           => $view_url,
+                'original_untouched'    => ( $mode === 'safe' ),
+                'details'               => sprintf(
+                    'Converted %d elements from %s. %s',
+                    count( $neutral ),
+                    $source,
+                    $mode === 'safe'
+                        ? 'Wrote to draft #' . $write_id . '; original #' . $original_id . ' unchanged.'
+                        : 'Wrote in-place to #' . $write_id . '.'
+                ),
+                'conversions_used'      => $new_count,
+                'conversions_remaining' => $remaining,
+            ];
+
+            if ( ! ALBUS_IS_PRO && $remaining > 0 && $remaining <= 3 ) {
+                $result['message'] .= " ({$remaining} free conversions remaining)";
+            }
+
+            return $result;
+
+        } catch ( \Exception $e ) {
+            Logger::error( 'Conversion failed', [
+                'post_id' => $post_id,
+                'target'  => $target,
+                'error'   => $e->getMessage(),
+            ]);
+            return [
+                'ok'            => false,
+                'message'       => 'Conversion failed: ' . $e->getMessage(),
+                'error_details' => $e->getMessage(),
             ];
         }
     }
     
-    public static function bulk_convert( array $post_ids, string $target ) {
-        // Check if bulk conversion is allowed
+    public static function bulk_convert( array $post_ids, string $target, string $mode = 'safe', string $confirm_inplace = '' ) {
         if ( ! albus_can_bulk_convert() ) {
-            Logger::warning( 'Bulk conversion requires PRO' );
             return [
-                'ok' => false,
-                'message' => 'Bulk conversion requires AlbusWP PRO. Please upgrade or convert pages one-by-one.',
-                'requires_pro' => true
+                'ok'           => false,
+                'message'      => 'Bulk conversion requires AlbusWP PRO. Please upgrade or convert pages one-by-one.',
+                'requires_pro' => true,
             ];
         }
-        
-        Logger::info( 'Starting bulk conversion', [ 'count' => count($post_ids), 'target' => $target ] );
-        
+
+        // Bulk never allows in-place — force safe
+        $mode = 'safe';
+
+        Logger::info( 'Starting bulk conversion (safe drafts only)', [
+            'count'  => count( $post_ids ),
+            'target' => $target,
+        ]);
+
         $results = [
-            'ok' => true,
-            'total' => count($post_ids),
+            'ok'      => true,
+            'mode'    => 'safe',
+            'total'   => count( $post_ids ),
             'success' => 0,
-            'failed' => 0,
-            'results' => []
+            'failed'  => 0,
+            'results' => [],
         ];
-        
+
         foreach ( $post_ids as $post_id ) {
             $post_id = intval( $post_id );
-            $result = self::convert_post( $post_id, $target );
-            
+            $result  = self::convert_post( $post_id, $target, $mode, $confirm_inplace );
+
             if ( $result['ok'] ) {
                 $results['success']++;
             } else {
                 $results['failed']++;
             }
-            
+
             $results['results'][] = [
-                'post_id' => $post_id,
-                'ok' => $result['ok'],
-                'message' => $result['message'] ?? ''
+                'post_id'  => $post_id,
+                'draft_id' => $result['draft_id'] ?? null,
+                'ok'       => $result['ok'],
+                'message'  => $result['message'] ?? '',
             ];
         }
-        
-        Logger::info( 'Bulk conversion complete', $results );
+
         return $results;
     }
     
@@ -449,27 +506,8 @@ class AdminPage {
         Logger::info( 'Restoring post from backup', [ 'post_id' => $post_id ] );
         
         try {
-            // Check for Gutenberg backup
-            $gutenberg_backup = get_post_meta( $post_id, '_albus_backup_post_content', true );
-            
-            // Check for Bricks backup
-            $bricks_backup = get_post_meta( $post_id, '_albus_backup__bricks_data', true );
-            
-            if ( empty( $gutenberg_backup ) && empty( $bricks_backup ) ) {
+            if ( ! Backup::restore( $post_id ) ) {
                 return [ 'ok' => false, 'message' => 'No backup found for this post.' ];
-            }
-            
-            // Restore content
-            if ( ! empty( $gutenberg_backup ) ) {
-                wp_update_post([ 'ID' => $post_id, 'post_content' => $gutenberg_backup ]);
-                delete_post_meta( $post_id, '_albus_backup_post_content' );
-                Logger::info( 'Restored Gutenberg backup', [ 'post_id' => $post_id ] );
-            }
-            
-            if ( ! empty( $bricks_backup ) ) {
-                update_post_meta( $post_id, '_bricks_data', $bricks_backup );
-                delete_post_meta( $post_id, '_albus_backup__bricks_data' );
-                Logger::info( 'Restored Bricks backup', [ 'post_id' => $post_id ] );
             }
             
             return [ 
@@ -492,7 +530,7 @@ class AdminPage {
             SELECT p.ID, p.post_title, p.post_type, pm.meta_key, pm.meta_value
             FROM {$wpdb->posts} p
             INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
-            WHERE pm.meta_key IN ('_albus_backup_post_content', '_albus_backup__bricks_data', '_albus_backup_meta')
+            WHERE pm.meta_key IN ('_albus_backup_post_content', '_albus_backup__bricks_data', '_albus_backup__elementor_data', '_albus_backup_full', '_albus_backup_meta')
             ORDER BY p.post_modified DESC
         " );
         
@@ -510,9 +548,13 @@ class AdminPage {
             }
             
             if ( $backup->meta_key === '_albus_backup_post_content' ) {
-                $organized[$id]['backups'][] = 'gutenberg';
+                $organized[$id]['backups'][] = 'content';
             } elseif ( $backup->meta_key === '_albus_backup__bricks_data' ) {
                 $organized[$id]['backups'][] = 'bricks';
+            } elseif ( $backup->meta_key === '_albus_backup__elementor_data' ) {
+                $organized[$id]['backups'][] = 'elementor';
+            } elseif ( $backup->meta_key === '_albus_backup_full' ) {
+                $organized[$id]['backups'][] = 'full';
             } elseif ( $backup->meta_key === '_albus_backup_meta' ) {
                 $organized[$id]['meta'] = json_decode( $backup->meta_value, true );
             }
@@ -525,38 +567,37 @@ class AdminPage {
         ];
     }
     
-    public static function cleanup_old_backups( int $days = 30 ) {
+    public static function cleanup_old_backups( int $days = 365 ) {
+        // Safety: never auto-delete site archives or conversion history.
+        // Only prune very old single-key backup meta (default 1 year).
         global $wpdb;
-        
-        Logger::info( 'Cleaning up old backups', [ 'days' => $days ] );
-        
-        // Find backup metadata older than X days
+
+        Logger::info( 'Cleaning up old backup meta (conservative)', [ 'days' => $days ] );
+
         $date_threshold = date( 'Y-m-d H:i:s', strtotime( "-{$days} days" ) );
-        
-        $old_backups = $wpdb->get_results( $wpdb->prepare( "
-            SELECT post_id, meta_value
-            FROM {$wpdb->postmeta}
-            WHERE meta_key = '_albus_backup_meta'
-            AND meta_value LIKE %s
-        ", '%"date":"' . substr( $date_threshold, 0, 10 ) . '%' ) );
-        
+
+        $old_backups = $wpdb->get_results(
+            "SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_albus_backup_meta'"
+        );
+
         $deleted = 0;
         foreach ( $old_backups as $backup ) {
             $meta = json_decode( $backup->meta_value, true );
-            if ( isset( $meta['date'] ) && strtotime( $meta['date'] ) < strtotime( $date_threshold ) ) {
-                delete_post_meta( $backup->post_id, '_albus_backup_post_content' );
-                delete_post_meta( $backup->post_id, '_albus_backup__bricks_data' );
-                delete_post_meta( $backup->post_id, '_albus_backup_meta' );
-                $deleted++;
+            if ( ! isset( $meta['date'] ) || strtotime( $meta['date'] ) >= strtotime( $date_threshold ) ) {
+                continue;
             }
+            // Never delete history or archives; only stale primary snapshot keys
+            delete_post_meta( $backup->post_id, '_albus_backup_post_content' );
+            delete_post_meta( $backup->post_id, '_albus_backup__bricks_data' );
+            delete_post_meta( $backup->post_id, '_albus_backup__elementor_data' );
+            // Keep _albus_backup_full and _albus_backup_history for safety
+            $deleted++;
         }
-        
-        Logger::info( 'Backup cleanup complete', [ 'deleted' => $deleted ] );
-        
+
         return [
-            'ok' => true,
+            'ok'      => true,
             'deleted' => $deleted,
-            'message' => "Deleted {$deleted} old backup(s)"
+            'message' => "Pruned {$deleted} old lightweight backup key(s). Full snapshots and archives were kept.",
         ];
     }
     
@@ -604,8 +645,7 @@ class AdminPage {
         
         switch ( $source ) {
             case 'wpbakery':
-                $content = get_post_field( 'post_content', $post_id );
-                $neutral = ( new WPBakery() )->toNeutralFromContent( $content );
+                $neutral = ( new WPBakery() )->toNeutralFromPost( $post_id );
                 break;
                 
             case 'elementor':
@@ -645,13 +685,18 @@ class AdminPage {
                     $bricks_data = get_post_meta( $post_id, '_bricks_data', true );
                 }
                 
-                // Bricks data might be JSON string or already decoded
+                // Bricks stores a PHP array; legacy Albus may have stored JSON
                 if ( is_string( $bricks_data ) ) {
-                    $bricks_data = json_decode( $bricks_data, true );
+                    $decoded = json_decode( $bricks_data, true );
+                    if ( json_last_error() === JSON_ERROR_NONE ) {
+                        $bricks_data = $decoded;
+                    } else {
+                        Logger::error( 'Bricks JSON decode error', [ 'post_id' => $post_id, 'error' => json_last_error_msg() ] );
+                        return [];
+                    }
                 }
                 
-                if ( json_last_error() !== JSON_ERROR_NONE ) {
-                    Logger::error( 'Bricks JSON decode error', [ 'post_id' => $post_id, 'error' => json_last_error_msg() ] );
+                if ( ! is_array( $bricks_data ) ) {
                     return [];
                 }
                 

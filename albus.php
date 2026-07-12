@@ -72,20 +72,30 @@ define( 'ALBUS_FREE_SCAN_LIMIT', 10 );
 define( 'ALBUS_FREE_CONVERT_LIMIT', 10 );
 
 function albus_is_conversion_allowed( $source, $target ) {
+    // Same-source is a no-op
+    if ( $source === $target ) {
+        return [ 'allowed' => false, 'message' => 'Source and target builders are the same.' ];
+    }
+
+    $valid = [ 'gutenberg', 'wpbakery', 'elementor', 'bricks', 'divi', 'kirki', 'classic' ];
+    if ( ! in_array( $source, $valid, true ) || ! in_array( $target, [ 'gutenberg', 'wpbakery', 'elementor', 'bricks' ], true ) ) {
+        return [ 'allowed' => false, 'message' => 'Unsupported conversion path.' ];
+    }
+
     if ( ALBUS_IS_PRO ) {
         return [ 'allowed' => true ];
     }
     
-    // FREE tier conversions according to conversion matrix
+    // FREE tier conversions (sensible starter paths)
     $free_conversions = [
-        'wpbakery' => [ 'gutenberg' ],
-        'divi' => [ 'gutenberg' ],
-        'kirki' => [ 'gutenberg' ],
-        'classic' => [ 'gutenberg' ],
-        'gutenberg' => [ 'bricks' ], // Free with 10-page limit
+        'wpbakery'  => [ 'gutenberg' ],
+        'divi'      => [ 'gutenberg' ],
+        'kirki'     => [ 'gutenberg' ],
+        'classic'   => [ 'gutenberg' ],
+        'gutenberg' => [ 'bricks', 'wpbakery' ],
     ];
     
-    if ( isset( $free_conversions[$source] ) && in_array( $target, $free_conversions[$source] ) ) {
+    if ( isset( $free_conversions[$source] ) && in_array( $target, $free_conversions[$source], true ) ) {
         return [ 'allowed' => true ];
     }
     
@@ -100,15 +110,19 @@ function albus_is_source_allowed( $source ) {
         return true;
     }
     // Free sources: WPBakery, Divi, Kirki, Classic Editor, Gutenberg
-    return in_array( $source, [ 'wpbakery', 'divi', 'kirki', 'classic', 'gutenberg' ] );
+    return in_array( $source, [ 'wpbakery', 'divi', 'kirki', 'classic', 'gutenberg' ], true );
 }
 
 function albus_is_target_allowed( $target ) {
+    // All four primary targets are recognised; FREE/PRO path rules live in albus_is_conversion_allowed()
+    if ( ! in_array( $target, [ 'gutenberg', 'wpbakery', 'elementor', 'bricks' ], true ) ) {
+        return false;
+    }
     if ( ALBUS_IS_PRO ) {
         return true;
     }
-    // Free targets: Gutenberg and Bricks (with limitations)
-    return in_array( $target, [ 'gutenberg', 'bricks' ] );
+    // Free can target Gutenberg, Bricks, WPBakery (path still gated)
+    return in_array( $target, [ 'gutenberg', 'bricks', 'wpbakery' ], true );
 }
 
 function albus_can_bulk_convert() {
@@ -190,7 +204,9 @@ add_action( 'rest_api_init', function () {
         'callback' => function ( WP_REST_Request $req ) {
             $post_id = intval( $req->get_param('post_id') );
             $target  = sanitize_text_field( $req->get_param('target') );
-            return \Albus\Admin\AdminPage::convert_post( $post_id, $target );
+            $mode    = sanitize_text_field( $req->get_param('mode') ?: 'safe' );
+            $confirm = sanitize_text_field( $req->get_param('confirm_inplace') ?: '' );
+            return \Albus\Admin\AdminPage::convert_post( $post_id, $target, $mode, $confirm );
         },
         'permission_callback' => function () { return current_user_can( 'manage_options' ); }
     ]);
@@ -200,7 +216,8 @@ add_action( 'rest_api_init', function () {
         'callback' => function ( WP_REST_Request $req ) {
             $post_ids = $req->get_param('post_ids');
             $target   = sanitize_text_field( $req->get_param('target') );
-            return \Albus\Admin\AdminPage::bulk_convert( $post_ids, $target );
+            // Bulk is always safe — ignore inplace attempts
+            return \Albus\Admin\AdminPage::bulk_convert( $post_ids, $target, 'safe', '' );
         },
         'permission_callback' => function () { return current_user_can( 'manage_options' ); }
     ]);
@@ -278,7 +295,8 @@ add_action( 'rest_api_init', function () {
 
 // Auto cleanup old backups daily
 add_action( 'wp_scheduled_delete', function () {
-    \Albus\Admin\AdminPage::cleanup_old_backups( 30 );
+    // Conservative: only prune lightweight keys after 1 year; keep full snapshots/archives
+    \Albus\Admin\AdminPage::cleanup_old_backups( 365 );
 });
 
 
