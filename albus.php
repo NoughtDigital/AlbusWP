@@ -23,9 +23,18 @@ if ( ! function_exists( 'albus_fs' ) ) {
         global $albus_fs;
 
         if ( ! isset( $albus_fs ) ) {
+            $autoload = __DIR__ . '/vendor/autoload.php';
+            if ( ! file_exists( $autoload ) ) {
+                return false;
+            }
+
             // Include Freemius SDK via Composer autoloader
-            require_once __DIR__ . '/vendor/autoload.php';
-            
+            require_once $autoload;
+
+            if ( ! function_exists( 'fs_dynamic_init' ) ) {
+                return false;
+            }
+
             // Activate multisite network integration.
             if ( ! defined( 'WP_FS__PRODUCT_21382_MULTISITE' ) ) {
                 define( 'WP_FS__PRODUCT_21382_MULTISITE', true );
@@ -50,20 +59,30 @@ if ( ! function_exists( 'albus_fs' ) ) {
         return $albus_fs;
     }
 
-    // Init Freemius.
-    albus_fs();
-    // Signal that SDK was initiated.
-    do_action( 'albus_fs_loaded' );
+    // Init Freemius when Composer deps are present.
+    if ( false !== albus_fs() ) {
+        do_action( 'albus_fs_loaded' );
+    } else {
+        add_action( 'admin_notices', function () {
+            if ( ! current_user_can( 'activate_plugins' ) ) {
+                return;
+            }
+            echo '<div class="notice notice-error"><p>'
+                . esc_html__( 'AlbusWP: Freemius SDK is missing. Run composer install in the plugin directory.', 'albus' )
+                . '</p></div>';
+        } );
+    }
 }
 
-define( 'ALBUS_VERSION', '0.1.0' );
+define( 'ALBUS_VERSION', '0.1.1' );
 define( 'ALBUS_PATH', plugin_dir_path( __FILE__ ) );
 define( 'ALBUS_URL', plugin_dir_url( __FILE__ ) );
 
 // Version control: Check Freemius license or manual override
 if ( ! defined( 'ALBUS_IS_PRO' ) ) {
     // Check if user has active Freemius license
-    $is_pro = function_exists( 'albus_fs' ) && albus_fs()->is_premium();
+    $fs = function_exists( 'albus_fs' ) ? albus_fs() : false;
+    $is_pro = $fs && is_object( $fs ) && method_exists( $fs, 'is_premium' ) && $fs->is_premium();
     define( 'ALBUS_IS_PRO', $is_pro );
 }
 
@@ -156,8 +175,9 @@ function albus_get_remaining_conversions() {
 }
 
 function albus_get_upgrade_url() {
-    if ( function_exists( 'albus_fs' ) ) {
-        return albus_fs()->get_upgrade_url();
+    $fs = function_exists( 'albus_fs' ) ? albus_fs() : false;
+    if ( $fs && is_object( $fs ) && method_exists( $fs, 'get_upgrade_url' ) ) {
+        return $fs->get_upgrade_url();
     }
     return admin_url( 'admin.php?page=albus-pricing' );
 }

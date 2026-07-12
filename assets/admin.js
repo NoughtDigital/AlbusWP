@@ -1,19 +1,42 @@
 (function ($) {
   let scanResults = [];
   let previewData = null;
+  let canBulk = false;
   let upgradeUrl = Albus.upgradeUrl || "#";
 
-  // Make all upgrade links functional
-  $(document).on("click", 'a[href="#"]:contains("Upgrade")', function (e) {
-    e.preventDefault();
-    window.location.href = upgradeUrl;
-  });
+  var TARGET_LABELS = {
+    gutenberg: "Gutenberg",
+    wpbakery: "WPBakery",
+    elementor: "Elementor",
+    bricks: "Bricks",
+  };
+
+  // Match albus_is_conversion_allowed() free paths
+  var FREE_PATHS = {
+    wpbakery: ["gutenberg"],
+    divi: ["gutenberg"],
+    kirki: ["gutenberg"],
+    classic: ["gutenberg"],
+    gutenberg: ["bricks", "wpbakery"],
+  };
+
+  function targetAllowed(source, target) {
+    if (Albus.isPro) return true;
+    return FREE_PATHS[source] && FREE_PATHS[source].indexOf(target) !== -1;
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
 
   // Tab switching
-  $(".albus-tab").on("click", function () {
-    const tab = $(this).data("tab");
+  function switchTab(tab) {
     $(".albus-tab").removeClass("active");
-    $(this).addClass("active");
+    $('.albus-tab[data-tab="' + tab + '"]').addClass("active");
     $(".albus-tab-content").hide();
     $("#tab-" + tab).show();
 
@@ -22,9 +45,17 @@
     } else if (tab === "help") {
       updateStats();
     }
+  }
+
+  $(".albus-tab").on("click", function () {
+    switchTab($(this).data("tab"));
   });
 
-  // Update stats
+  $(document).on("click", ".albus-tab-jump", function (e) {
+    e.preventDefault();
+    switchTab($(this).data("tab"));
+  });
+
   function updateStats() {
     $.ajax({
       url: Albus.rest + "/backups",
@@ -38,104 +69,171 @@
     });
   }
 
-  // Row template
-  function row(item) {
-    var debugBtn =
-      '<button class="button debug-raw" data-id="' +
-      item.id +
-      '" style="background:#ffa500;color:white;">Debug Data</button> ';
-
-    var proBadge = item.requires_pro
-      ? ' <span style="background:#ff6b35;color:white;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:bold;margin-left:5px;">PRO</span>'
-      : "";
-
-    var targets = ["gutenberg", "wpbakery", "elementor", "bricks"];
-    var labels = {
-      gutenberg: "Gutenberg",
-      wpbakery: "WPBakery",
-      elementor: "Elementor",
-      bricks: "Bricks",
-    };
-
-    // Match albus_is_conversion_allowed() free paths
-    var freePaths = {
-      wpbakery: ["gutenberg"],
-      divi: ["gutenberg"],
-      kirki: ["gutenberg"],
-      classic: ["gutenberg"],
-      gutenberg: ["bricks", "wpbakery"],
-    };
-
-    var buttons = "";
-    targets.forEach(function (target) {
-      if (target === item.source) {
-        return; // skip same-source conversion
-      }
-      var allowedFree =
-        freePaths[item.source] &&
-        freePaths[item.source].indexOf(target) !== -1;
-      var isPro = !Albus.isPro && !allowedFree;
-      var label = labels[target];
-      var proClass = isPro ? " pro-feature" : "";
-      var lock = isPro ? " [PRO]" : "";
-      var title = isPro ? ' title="Requires AlbusWP PRO"' : "";
-      var primary = target === "bricks" ? " button-primary" : "";
-
-      buttons +=
-        '<button class="button preview' +
-        proClass +
-        '" data-id="' +
-        item.id +
-        '" data-target="' +
-        target +
-        '"' +
-        title +
-        (isPro ? " disabled" : "") +
-        ">Preview → " +
-        label +
-        lock +
-        "</button> ";
-      buttons +=
-        '<button class="button convert' +
-        primary +
-        proClass +
-        '" data-id="' +
-        item.id +
-        '" data-target="' +
-        target +
-        '"' +
-        title +
-        (isPro ? " disabled" : "") +
-        ">Draft → " +
-        label +
-        lock +
-        "</button> ";
+  function availableTargets(item) {
+    return ["gutenberg", "wpbakery", "elementor", "bricks"].filter(function (
+      target
+    ) {
+      return target !== item.source;
     });
+  }
+
+  function defaultTarget(item) {
+    var targets = availableTargets(item);
+    var free = targets.filter(function (t) {
+      return targetAllowed(item.source, t);
+    });
+    if (free.indexOf("bricks") !== -1) return "bricks";
+    if (free.length) return free[0];
+    return targets[0];
+  }
+
+  function row(item) {
+    var targets = availableTargets(item);
+    var selected = defaultTarget(item);
+    var options = targets
+      .map(function (target) {
+        var isPro = !targetAllowed(item.source, target);
+        var label = TARGET_LABELS[target] + (isPro ? " (PRO)" : "");
+        return (
+          '<option value="' +
+          target +
+          '"' +
+          (target === selected ? " selected" : "") +
+          (isPro ? ' data-pro="1"' : "") +
+          ">" +
+          label +
+          "</option>"
+        );
+      })
+      .join("");
+
+    var isSelectedPro = !targetAllowed(item.source, selected);
+    var proBadge = item.requires_pro
+      ? '<span class="albus-badge albus-badge-pro">PRO</span>'
+      : "";
 
     return (
       '<div class="albus-card" data-post-id="' +
       item.id +
+      '" data-source="' +
+      escapeHtml(item.source) +
       '">' +
-      "<div><strong>#" +
+      '<div class="albus-card-meta">' +
+      "<strong>#" +
       item.id +
       "</strong> " +
-      item.title +
-      ' <span style="opacity:.6">[' +
-      item.source +
+      escapeHtml(item.title) +
+      ' <span class="albus-source">[' +
+      escapeHtml(item.source) +
       "]</span>" +
       proBadge +
       "</div>" +
-      '<div class="albus-actions-group">' +
-      debugBtn +
-      buttons +
+      '<div class="albus-card-actions">' +
+      '<label class="screen-reader-text" for="albus-target-' +
+      item.id +
+      '">Convert to</label>' +
+      '<select class="albus-target-select" id="albus-target-' +
+      item.id +
+      '" data-id="' +
+      item.id +
+      '">' +
+      options +
+      "</select>" +
+      '<button type="button" class="button preview" data-id="' +
+      item.id +
+      '"' +
+      (isSelectedPro ? " disabled" : "") +
+      ">Preview</button>" +
+      '<button type="button" class="button button-primary convert" data-id="' +
+      item.id +
+      '"' +
+      (isSelectedPro ? " disabled" : "") +
+      ">Create draft</button>" +
+      '<button type="button" class="button-link debug-raw" data-id="' +
+      item.id +
+      '">Debug</button>' +
       "</div></div>"
     );
   }
 
+  function syncCardActions(card) {
+    var select = card.find(".albus-target-select");
+    var option = select.find("option:selected");
+    var isPro = option.data("pro") === 1 || option.attr("data-pro") === "1";
+    card.find(".preview, .convert").prop("disabled", isPro);
+    card.find(".albus-pro-hint").remove();
+    if (isPro) {
+      card
+        .find(".albus-card-actions")
+        .append(
+          '<span class="albus-pro-hint">Requires <a href="' +
+            upgradeUrl +
+            '">PRO</a></span>'
+        );
+    }
+  }
+
+  function renderStatusBar(resp) {
+    var bar = $("#albus-status-bar");
+    if (resp.is_pro) {
+      bar.hide().empty();
+      return;
+    }
+
+    var scanned = resp.scanned_count || resp.count || 0;
+    var remaining = resp.conversions_remaining;
+    var parts = [];
+
+    if (resp.is_limited) {
+      parts.push(
+        "Showing first " +
+          resp.scan_limit +
+          " of " +
+          resp.total_posts +
+          " posts"
+      );
+    } else {
+      parts.push("Scanned " + scanned + " pages");
+    }
+
+    parts.push(remaining + " conversions remaining");
+
+    if (resp.pro_count > 0) {
+      parts.push(resp.pro_count + " need PRO");
+    }
+
+    var html =
+      '<div class="albus-status-inner">' +
+      "<span>" +
+      parts.join(" · ") +
+      "</span>" +
+      '<a href="' +
+      upgradeUrl +
+      '" class="button button-small">Upgrade to PRO</a>' +
+      "</div>";
+
+    if (remaining === 0) {
+      html +=
+        '<p class="albus-status-warn">Free conversion limit reached.</p>';
+    } else if (remaining > 0 && remaining <= 3) {
+      html +=
+        '<p class="albus-status-warn">Only ' +
+        remaining +
+        " free conversions left.</p>";
+    }
+
+    bar.html(html).show();
+  }
+
   // Scan site
   $("#albus-scan").on("click", function () {
-    $("#albus-results").html("<p>Scanning…</p>");
+    var btn = $(this);
+    btn.prop("disabled", true);
+    $("#albus-results").html(
+      '<p class="albus-scanning"><span class="albus-loading"></span> Scanning…</p>'
+    );
     $("#albus-bulk-actions").hide();
+    $("#albus-status-bar").hide();
 
     $.ajax({
       url: Albus.rest + "/scan",
@@ -143,147 +241,68 @@
       headers: { "X-WP-Nonce": Albus.nonce },
     })
       .then(function (resp) {
+        btn.prop("disabled", false);
         scanResults = resp.items || [];
+        canBulk = !!resp.can_bulk;
+        renderStatusBar(resp);
+
+        var scanned = resp.scanned_count || resp.count || 0;
         var html = '<div class="scan-results">';
-
-        // Show FREE version limits
-        if (!resp.is_pro) {
-          html +=
-            '<div class="albus-info-box" style="margin-bottom:1rem;background:#f0f9ff;border-left:4px solid #3b82f6;">';
-          html += '<h3 style="margin-top:0;">AlbusWP FREE Edition</h3>';
-
-          // Scan limit info
-          if (resp.is_limited) {
-            html +=
-              "<p><strong>⚠️ Scan Limit:</strong> Showing first " +
-              resp.scan_limit +
-              " of " +
-              resp.total_posts +
-              " total posts.</p>";
-          } else {
-            html +=
-              "<p>Scanned " + resp.scan_limit + " pages (FREE limit).</p>";
-          }
-
-          // Conversion limit info
-          var remaining = resp.conversions_remaining;
-          var used = resp.conversions_used;
-          html +=
-            "<p><strong>Conversions:</strong> " +
-            used +
-            " used, <strong>" +
-            remaining +
-            " remaining</strong></p>";
-
-          if (remaining <= 3 && remaining > 0) {
-            html +=
-              '<p style="color:#d63638;"><strong>Running low!</strong> Only ' +
-              remaining +
-              " free conversions left.</p>";
-          } else if (remaining === 0) {
-            html +=
-              '<p style="color:#d63638;"><strong>Limit reached!</strong> Upgrade to PRO for unlimited conversions.</p>';
-          }
-
-          // Available conversions
-          if (resp.free_count > 0) {
-            html +=
-              "<p><strong>" +
-              resp.free_count +
-              "</strong> WPBakery pages available to convert</p>";
-          }
-
-          if (resp.pro_count > 0) {
-            html +=
-              "<p><strong>" +
-              resp.pro_count +
-              "</strong> pages require PRO (Elementor, Divi, or Bricks output)</p>";
-          }
-
-          // PRO features
-          html += '<hr style="margin:1rem 0;">';
-          html += "<p><strong>Upgrade to PRO for:</strong></p>";
-          html += '<ul style="margin:0.5rem 0;">';
-          html += "<li><strong>Unlimited</strong> scans & conversions</li>";
-          html += "<li>Convert FROM Elementor & Divi</li>";
-          html += "<li>Convert TO Bricks Builder</li>";
-          html += "<li><strong>Bulk conversion</strong> (one-click)</li>";
-          html += "<li>Advanced style mapping</li>";
-          html += "<li>Priority support</li>";
-          html += "</ul>";
-          html +=
-            '<p style="margin-top:1rem;"><a href="' +
-            upgradeUrl +
-            '" class="button button-primary button-large">Upgrade to AlbusWP PRO</a></p>';
-          html += "</div>";
-        }
-
         html +=
-          "<p>Scanned <strong>" +
-          (resp.scanned_count || resp.scan_limit) +
-          "</strong> pages. ";
-        html += "Found <strong>" + resp.count + "</strong> convertible items";
+          '<p class="albus-results-summary">Found <strong>' +
+          resp.count +
+          "</strong> convertible item" +
+          (resp.count === 1 ? "" : "s") +
+          " from <strong>" +
+          scanned +
+          "</strong> scanned page" +
+          (scanned === 1 ? "" : "s");
         if (!resp.is_pro && resp.pro_count > 0) {
           html +=
             " (<strong>" +
             resp.free_count +
             "</strong> free, <strong>" +
             resp.pro_count +
-            "</strong> PRO only)";
+            "</strong> PRO)";
         }
         html += ".</p>";
 
-        // Show helpful message if nothing found
         if (resp.count === 0) {
           html +=
-            '<div class="albus-info-box" style="background:#fff8e5;border-left:4px solid #f0b429;margin-top:1rem;">';
-          html +=
-            '<h3 style="margin-top:0;">No Page Builder Content Found</h3>';
-          html +=
-            "<p>The scan didn't find any pages using WPBakery or Elementor. This could mean:</p>";
-          html += "<ul>";
-          html += "<li>Your pages don't use a page builder</li>";
-          html +=
-            "<li>Your pages use a different builder (Divi, Oxygen, Beaver Builder, etc.)</li>";
-          html += "<li>The pages are using the default WordPress editor</li>";
-          html += "</ul>";
-          html += "<p><strong>What Albus detects:</strong></p>";
-          html += "<ul>";
-          html +=
-            "<li>✅ <strong>WPBakery</strong> (FREE) - looks for <code>[vc_row]</code> shortcodes</li>";
-          html +=
-            "<li><strong>Elementor</strong> (PRO) - looks for <code>_elementor_data</code> meta</li>";
-          html += "</ul>";
-          html +=
-            '<p>If you have Elementor pages, <a href="' +
-            upgradeUrl +
-            '" class="button button-primary">Upgrade to PRO</a> to convert them.</p>';
-          html += "</div>";
+            '<div class="albus-empty">' +
+            "<h3>No page builder content found</h3>" +
+            "<p>Albus looks for Gutenberg, WPBakery, Elementor, Bricks, Divi, and Classic content. Check the Help tab for details.</p>" +
+            "</div>";
+        } else {
+          resp.items.forEach(function (item) {
+            html += row(item);
+          });
         }
 
-        resp.items.forEach(function (item) {
-          html += row(item);
-        });
         html += "</div>";
         $("#albus-results").html(html);
 
         if (resp.count > 0) {
           $("#albus-bulk-actions").show();
-
-          // Disable bulk buttons for FREE users
-          if (!resp.can_bulk) {
-            $(
-              "#albus-bulk-gutenberg, #albus-bulk-bricks, #albus-bulk-wpbakery, #albus-bulk-elementor"
-            )
-              .prop("disabled", true)
-              .attr("title", "Bulk conversion requires AlbusWP PRO")
-              .addClass("pro-feature");
+          $("#albus-bulk-run").prop("disabled", !canBulk);
+          $("#albus-bulk-target").prop("disabled", !canBulk);
+          if (canBulk) {
+            $("#albus-bulk-lock").hide();
+          } else {
+            $("#albus-bulk-lock").show();
           }
         }
       })
       .fail(function () {
-        $("#albus-results").html("<p>Error during scan.</p>");
+        btn.prop("disabled", false);
+        $("#albus-results").html(
+          '<p class="albus-error">Scan failed. Check your connection and try again.</p>'
+        );
       });
+  });
+
+  $("#albus-results").on("change", ".albus-target-select", function () {
+    syncCardActions($(this).closest(".albus-card"));
   });
 
   // Debug raw builder data
@@ -318,7 +337,7 @@
         }
         if (resp.json_error && resp.json_error !== "No error") {
           infoHtml +=
-            '<p style="color:red;"><strong>JSON Error:</strong> ' +
+            '<p class="albus-status-warn"><strong>JSON Error:</strong> ' +
             resp.json_error +
             "</p>";
         }
@@ -340,22 +359,27 @@
       });
   });
 
-  // Handle PRO feature clicks
-  $("#albus-results").on("click", ".pro-feature", function (e) {
-    e.preventDefault();
-    alert(
-      "This feature requires AlbusWP PRO.\n\nUnlock all conversion paths between Gutenberg, WPBakery, Elementor, and Bricks.\n\nUpgrade to unlock!"
-    );
-    return false;
-  });
+  function getSelectedTarget(card) {
+    return card.find(".albus-target-select").val();
+  }
 
   // Preview conversion
-  $("#albus-results").on("click", ".preview:not(.pro-feature)", function () {
-    var id = $(this).data("id");
-    var target = $(this).data("target");
+  $("#albus-results").on("click", ".preview", function () {
     var btn = $(this);
+    if (btn.prop("disabled")) return;
 
-    btn.prop("disabled", true).text("Generating preview…");
+    var card = btn.closest(".albus-card");
+    var id = btn.data("id");
+    var target = getSelectedTarget(card);
+    var option = card.find(".albus-target-select option:selected");
+    if (option.data("pro") === 1 || option.attr("data-pro") === "1") {
+      alert(
+        "This conversion path requires AlbusWP PRO.\n\nUpgrade to unlock all builders."
+      );
+      return;
+    }
+
+    btn.prop("disabled", true).text("Generating…");
 
     $.ajax({
       url: Albus.rest + "/preview",
@@ -364,7 +388,7 @@
       data: { post_id: id, target: target },
     })
       .then(function (resp) {
-        btn.prop("disabled", false).text("Preview → " + target);
+        btn.prop("disabled", false).text("Preview");
 
         if (resp.ok) {
           previewData = { post_id: id, target: target };
@@ -385,13 +409,15 @@
 
           $(".albus-preview-info").html(infoHtml);
           $(".albus-preview-body code").text(resp.preview);
+          $("#albus-preview-modal h2").text("Preview Conversion");
+          $("#albus-confirm-convert").show();
           $("#albus-preview-modal").fadeIn();
         } else {
           alert("Preview failed: " + (resp.message || "Unknown error"));
         }
       })
       .fail(function (xhr, status, error) {
-        btn.prop("disabled", false).text("Preview → " + target);
+        btn.prop("disabled", false).text("Preview");
         alert("Preview failed: " + error);
       });
   });
@@ -414,9 +440,20 @@
   });
 
   // Direct conversion
-  $("#albus-results").on("click", ".convert:not(.pro-feature)", function () {
-    var id = $(this).data("id");
-    var target = $(this).data("target");
+  $("#albus-results").on("click", ".convert", function () {
+    var btn = $(this);
+    if (btn.prop("disabled")) return;
+
+    var card = btn.closest(".albus-card");
+    var id = btn.data("id");
+    var target = getSelectedTarget(card);
+    var option = card.find(".albus-target-select option:selected");
+    if (option.data("pro") === 1 || option.attr("data-pro") === "1") {
+      alert(
+        "This conversion path requires AlbusWP PRO.\n\nUpgrade to unlock all builders."
+      );
+      return;
+    }
     performConversion(id, target);
   });
 
@@ -439,7 +476,6 @@
     }
   });
 
-  // Perform single conversion
   function performConversion(id, target) {
     var mode = getConversionMode();
     var confirmInplace = "";
@@ -456,7 +492,7 @@
       if (
         !confirm(
           "Create a DRAFT copy of this page and convert the draft to " +
-            target +
+            (TARGET_LABELS[target] || target) +
             "?\n\nThe live original will NOT be changed."
         )
       ) {
@@ -465,7 +501,7 @@
     }
 
     var card = $('.albus-card[data-post-id="' + id + '"]');
-    var btn = card.find('.convert[data-target="' + target + '"]');
+    var btn = card.find(".convert");
 
     btn.prop("disabled", true).text("Converting…");
 
@@ -481,7 +517,6 @@
       },
     })
       .then(function (resp) {
-        console.log("Conversion response:", resp);
         if (resp.ok) {
           btn.text("Done").removeClass("button-primary");
 
@@ -507,19 +542,19 @@
             successMsg +=
               '<a href="' +
               resp.edit_url +
-              '" target="_blank" style="margin-top:4px;display:inline-block;" class="button button-primary">Edit draft</a> ';
+              '" target="_blank" class="button button-primary">Edit draft</a> ';
           }
           if (resp.preview_url) {
             successMsg +=
               '<a href="' +
               resp.preview_url +
-              '" target="_blank" style="margin-top:4px;display:inline-block;" class="button">Preview draft</a> ';
+              '" target="_blank" class="button">Preview draft</a> ';
           }
           if (mode === "inplace") {
             successMsg +=
               '<button class="button restore-post" data-id="' +
               id +
-              '" style="margin-top:4px;">Restore live backup</button>';
+              '">Restore live backup</button>';
           }
           successMsg += "</div>";
 
@@ -529,45 +564,40 @@
             resp.conversions_remaining !== undefined &&
             resp.conversions_remaining === 0
           ) {
-            var limitMsg =
-              '<div class="albus-warning-box" style="margin-top:1rem;">';
-            limitMsg += "<strong>Free Limit Reached!</strong>";
-            limitMsg +=
-              "<p>You've used all free conversions. <a href=\"" +
-              upgradeUrl +
-              '" class="button button-primary">Upgrade to PRO</a></p>';
-            limitMsg += "</div>";
-            $("#albus-results").prepend(limitMsg);
+            $("#albus-status-bar")
+              .html(
+                '<div class="albus-status-inner">' +
+                  "<span>Free conversion limit reached.</span>" +
+                  '<a href="' +
+                  upgradeUrl +
+                  '" class="button button-small">Upgrade to PRO</a>' +
+                  "</div>"
+              )
+              .show();
           }
         } else {
-          btn.text("Failed").css("background", "#dc3545");
+          btn.prop("disabled", false).text("Create draft");
           alert("Conversion failed: " + (resp.message || "Unknown error"));
         }
       })
       .fail(function (xhr, status, error) {
-        btn.prop("disabled", false).text("Draft → " + target);
-        var errorMsg =
-          '<div class="albus-error">' +
-          "<strong>Network Error</strong><br>" +
-          "<small>Check browser console and WordPress debug.log for details.</small>" +
-          "</div>";
-
-        card.append(errorMsg);
+        btn.prop("disabled", false).text("Create draft");
+        card.append(
+          '<div class="albus-error"><strong>Network Error</strong><br><small>Check browser console and WordPress debug.log for details.</small></div>'
+        );
         alert("Network Error\n\n" + error);
       });
   }
 
-  // Bulk conversion
   function bulkConvert(target) {
     if (scanResults.length === 0) {
       alert("No posts to convert. Please scan first.");
       return;
     }
 
-    // Check if bulk is allowed (will be disabled in UI, but double-check)
-    if ($("#albus-bulk-" + target.toLowerCase()).hasClass("pro-feature")) {
+    if (!canBulk) {
       alert(
-        "Bulk conversion requires AlbusWP PRO.\n\nUnlimited conversions\nOne-click bulk processing\nPriority support\n\nUpgrade to unlock!"
+        "Bulk conversion requires AlbusWP PRO.\n\nUpgrade to unlock unlimited conversions and one-click bulk processing."
       );
       return;
     }
@@ -577,30 +607,28 @@
         "Create DRAFT copies of all " +
           scanResults.length +
           " posts and convert those drafts to " +
-          target +
+          (TARGET_LABELS[target] || target) +
           "?\n\nLive originals will NOT be changed. Bulk never overwrites live pages."
       )
     ) {
       return;
     }
 
-    var postIds = scanResults.map((item) => item.id);
+    var postIds = scanResults.map(function (item) {
+      return item.id;
+    });
     var total = postIds.length;
     var completed = 0;
 
     $("#albus-bulk-progress").show();
-    $(
-      "#albus-bulk-gutenberg, #albus-bulk-bricks, #albus-bulk-wpbakery, #albus-bulk-elementor"
-    ).prop("disabled", true);
+    $("#albus-bulk-run, #albus-bulk-target").prop("disabled", true);
 
     function convertNext(index) {
       if (index >= postIds.length) {
         $(".albus-progress-text").text(
           "Complete! Converted " + completed + " of " + total + " posts."
         );
-        $(
-          "#albus-bulk-gutenberg, #albus-bulk-bricks, #albus-bulk-wpbakery, #albus-bulk-elementor"
-        ).prop("disabled", false);
+        $("#albus-bulk-run, #albus-bulk-target").prop("disabled", !canBulk);
         setTimeout(function () {
           $("#albus-bulk-progress").fadeOut();
         }, 3000);
@@ -612,7 +640,7 @@
 
       $(".albus-progress-fill").css("width", percent + "%");
       $(".albus-progress-text").text(
-        "Converting post " + (index + 1) + " of " + total + "..."
+        "Converting post " + (index + 1) + " of " + total + "…"
       );
 
       $.ajax({
@@ -625,18 +653,12 @@
           completed++;
         }
 
-        // Update the card in the UI
         var card = $('.albus-card[data-post-id="' + postId + '"]');
+        var convertBtn = card.find(".convert");
         if (resp && resp.ok) {
-          card
-            .find('.convert[data-target="' + target + '"]')
-            .text("Done")
-            .removeClass("button-primary");
+          convertBtn.text("Done").removeClass("button-primary");
         } else {
-          card
-            .find('.convert[data-target="' + target + '"]')
-            .text("Failed")
-            .css("background", "#dc3545");
+          convertBtn.text("Failed").css("background", "#dc3545");
         }
 
         convertNext(index + 1);
@@ -646,20 +668,8 @@
     convertNext(0);
   }
 
-  $("#albus-bulk-gutenberg").on("click", function () {
-    bulkConvert("gutenberg");
-  });
-
-  $("#albus-bulk-wpbakery").on("click", function () {
-    bulkConvert("wpbakery");
-  });
-
-  $("#albus-bulk-elementor").on("click", function () {
-    bulkConvert("elementor");
-  });
-
-  $("#albus-bulk-bricks").on("click", function () {
-    bulkConvert("bricks");
+  $("#albus-bulk-run").on("click", function () {
+    bulkConvert($("#albus-bulk-target").val());
   });
 
   // Restore post
@@ -691,7 +701,6 @@
       });
   });
 
-  // Load backups
   function loadBackups() {
     $("#albus-backups-list").html("<p>Loading backups…</p>");
 
@@ -703,14 +712,12 @@
       .then(function (resp) {
         if (resp.ok && resp.items.length > 0) {
           var html =
-            '<div class="backups-header" style="margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;">';
-          html +=
+            '<div class="backups-header">' +
             "<p>Found " +
             resp.count +
-            " backup(s). Backups older than 30 days are automatically deleted.</p>";
-          html +=
-            '<button class="button" id="albus-cleanup-backups">Clean Up Old Backups</button>';
-          html += "</div>";
+            " backup(s). Backups older than 30 days are automatically deleted.</p>" +
+            '<button class="button" id="albus-cleanup-backups">Clean Up Old Backups</button>' +
+            "</div>";
 
           html += '<div class="backups-list">';
           resp.items.forEach(function (item) {
@@ -719,21 +726,24 @@
               "<div><strong>#" +
               item.post_id +
               "</strong> " +
-              item.title +
-              " <span style='opacity:.6'>[" +
-              item.post_type +
+              escapeHtml(item.title) +
+              ' <span class="albus-source">[' +
+              escapeHtml(item.post_type) +
               "]</span>";
 
             item.backups.forEach(function (backup) {
-              html += ' <span class="albus-backup-badge">' + backup + "</span>";
+              html +=
+                ' <span class="albus-backup-badge">' +
+                escapeHtml(backup) +
+                "</span>";
             });
 
             if (item.meta) {
               html +=
-                "<br><small style='opacity:.7'>Backed up: " +
-                item.meta.date +
+                '<br><small class="albus-muted">Backed up: ' +
+                escapeHtml(item.meta.date) +
                 " | Source: " +
-                (item.meta.source || "unknown") +
+                escapeHtml(item.meta.source || "unknown") +
                 "</small>";
             }
 
@@ -761,7 +771,6 @@
     loadBackups();
   });
 
-  // Cleanup old backups
   $(document).on("click", "#albus-cleanup-backups", function () {
     if (!confirm("Delete backups older than 30 days?")) {
       return;

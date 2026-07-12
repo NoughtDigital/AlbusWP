@@ -65,44 +65,46 @@ class AdminPage {
             </div>
             
             <div class="albus-tab-content" id="tab-scan">
-                <div class="albus-warning-box" style="border-left:4px solid #00a32a;background:#edfaef;">
-                    <h3 style="margin-top:0;">Safe mode (default)</h3>
-                    <p><strong>Albus never overwrites your live page unless you explicitly force it.</strong></p>
-                    <ul>
-                        <li>Conversion creates a <strong>draft duplicate</strong> of each page/post</li>
-                        <li>The original stays published and untouched</li>
-                        <li>You review the draft in Gutenberg / Elementor / Bricks, then cut over manually when ready</li>
-                        <li>Every write is snapshotted; in-place mode also archives the original to a site archive log</li>
-                    </ul>
+                <div class="albus-toolbar">
+                    <div class="albus-toolbar-main">
+                        <button class="button button-primary button-hero" id="albus-scan">Scan Site</button>
+                        <p class="albus-safe-note">
+                            Safe by default: conversions create <strong>draft copies</strong> — live pages stay untouched.
+                            <button type="button" class="button-link albus-tab-jump" data-tab="help">How it works</button>
+                        </p>
+                    </div>
+                    <details class="albus-advanced">
+                        <summary>Advanced options</summary>
+                        <label class="albus-danger-label">
+                            <input type="checkbox" id="albus-inplace-mode" value="1" />
+                            Overwrite live posts in place (requires typing OVERWRITE LIVE)
+                        </label>
+                        <?php if ( $log_exists ) : ?>
+                            <a href="<?php echo esc_url( ALBUS_URL . 'albus-debug.log' ); ?>" target="_blank" class="button-link">View debug log</a>
+                        <?php endif; ?>
+                    </details>
                 </div>
 
-                <div class="albus-info-box">
-                    <p><strong>What does Albus do?</strong> Converts page builder content between Gutenberg, WPBakery, Elementor, and Bricks — safely via draft copies by default.</p>
-                    <?php if ( ! ALBUS_IS_PRO ) : ?>
-                    <p><strong>FREE Version:</strong> Scan up to <?php echo (int) ALBUS_FREE_SCAN_LIMIT; ?> pages and convert up to <?php echo (int) ALBUS_FREE_CONVERT_LIMIT; ?> pages. <a href="<?php echo esc_url( albus_get_upgrade_url() ); ?>" class="button button-primary">Upgrade to PRO</a></p>
-                    <?php endif; ?>
-                    <p style="margin-bottom:0;">
-                        <label>
-                            <input type="checkbox" id="albus-inplace-mode" value="1" />
-                            <strong>Dangerous:</strong> overwrite live posts in place (requires typing OVERWRITE LIVE)
-                        </label>
-                    </p>
-                </div>
-                
-                <div class="albus-actions">
-                    <button class="button button-primary" id="albus-scan">Scan Site</button>
-                    <?php if ( $log_exists ) : ?>
-                        <a href="<?php echo esc_url( ALBUS_URL . 'albus-debug.log' ); ?>" target="_blank" class="button">View Debug Log</a>
-                    <?php endif; ?>
-                </div>
-                
-                <div id="albus-bulk-actions" style="display:none;margin-top:1rem;">
-                    <h3>Bulk Actions (safe drafts)</h3>
-                    <p class="description">Bulk always creates draft copies. Live pages are not changed.</p>
-                    <button class="button" id="albus-bulk-gutenberg">Draft-convert all → Gutenberg</button>
-                    <button class="button" id="albus-bulk-wpbakery">Draft-convert all → WPBakery</button>
-                    <button class="button" id="albus-bulk-elementor">Draft-convert all → Elementor</button>
-                    <button class="button button-primary" id="albus-bulk-bricks">Draft-convert all → Bricks</button>
+                <div id="albus-status-bar" class="albus-status-bar" style="display:none;"></div>
+
+                <div id="albus-results"></div>
+
+                <div id="albus-bulk-actions" class="albus-bulk" style="display:none;">
+                    <div class="albus-bulk-row">
+                        <label for="albus-bulk-target"><strong>Bulk convert all to</strong></label>
+                        <select id="albus-bulk-target">
+                            <option value="gutenberg">Gutenberg</option>
+                            <option value="wpbakery">WPBakery</option>
+                            <option value="elementor">Elementor</option>
+                            <option value="bricks" selected>Bricks</option>
+                        </select>
+                        <button class="button button-primary" id="albus-bulk-run">Create drafts</button>
+                        <span id="albus-bulk-lock" class="albus-bulk-lock" style="display:none;">
+                            Bulk conversion requires
+                            <a href="<?php echo esc_url( albus_get_upgrade_url() ); ?>">AlbusWP PRO</a>
+                        </span>
+                    </div>
+                    <p class="description">Bulk always creates draft copies. Live pages are never changed.</p>
                     <div id="albus-bulk-progress" style="display:none;margin-top:1rem;">
                         <div class="albus-progress-bar">
                             <div class="albus-progress-fill"></div>
@@ -110,8 +112,6 @@ class AdminPage {
                         <p class="albus-progress-text"></p>
                     </div>
                 </div>
-                
-                <div id="albus-results"></div>
             </div>
             
             <div class="albus-tab-content" id="tab-backups" style="display:none;">
@@ -202,7 +202,7 @@ class AdminPage {
                     <ul>
                         <li>Bricks output stores data in <code>_bricks_page_content_2</code> — open the page in the Bricks editor to verify</li>
                         <li>Elementor output stores JSON in <code>_elementor_data</code> — CSS regenerates on next edit</li>
-                        <li>Missing content? Use Debug Data on the scan card, then Export JSON</li>
+                        <li>Missing content? Use Debug on the scan card to inspect raw builder data</li>
                     </ul>
                 </div>
                 

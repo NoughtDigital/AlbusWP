@@ -1,24 +1,209 @@
+/* Layout */
 .albus .scan-results {
-  margin-top: 1rem;
+  margin-top: 0.75rem;
 }
+
+.albus-toolbar {
+  margin: 0.5rem 0 1.25rem;
+}
+
+.albus-toolbar-main {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.albus-safe-note {
+  margin: 0;
+  color: #1e5b2a;
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 42rem;
+}
+
+.albus-safe-note .button-link,
+.albus-tab-jump {
+  margin-left: 0.35rem;
+  vertical-align: baseline;
+}
+
+.albus-advanced {
+  margin-top: 0.75rem;
+  max-width: 36rem;
+}
+
+.albus-advanced summary {
+  cursor: pointer;
+  color: #646970;
+  font-size: 13px;
+  user-select: none;
+}
+
+.albus-advanced[open] summary {
+  margin-bottom: 0.5rem;
+}
+
+.albus-danger-label {
+  display: block;
+  color: #b32d2e;
+  font-size: 13px;
+  margin-bottom: 0.35rem;
+}
+
+/* Status bar — single free/upsell strip */
+.albus-status-bar {
+  background: #f0f6fc;
+  border: 1px solid #c5d9ed;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 1rem;
+}
+
+.albus-status-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: #1d2327;
+}
+
+.albus-status-warn {
+  margin: 0.5rem 0 0;
+  color: #b32d2e;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.albus-results-summary {
+  margin: 0 0 0.75rem;
+  font-size: 14px;
+}
+
+.albus-scanning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #646970;
+}
+
+.albus-empty {
+  background: #fff;
+  border: 1px solid #dcdcde;
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+}
+
+.albus-empty h3 {
+  margin: 0 0 0.5rem;
+}
+
+.albus-empty p {
+  margin: 0;
+  color: #646970;
+}
+
+/* Result cards */
 .albus .albus-card {
   background: #fff;
   border: 1px solid #ccd0d4;
-  padding: 12px;
+  padding: 14px 16px;
   border-radius: 6px;
   margin: 8px 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
 }
-.albus .albus-card > div:first-child {
+
+.albus .albus-card-meta {
   flex: 1;
+  min-width: 180px;
+  font-size: 14px;
 }
-.albus .albus-card .albus-actions-group {
+
+.albus .albus-card-actions {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
+}
+
+.albus .albus-target-select {
+  min-width: 140px;
+  max-width: 180px;
+}
+
+.albus-source,
+.albus-muted {
+  opacity: 0.65;
+  font-size: 12px;
+}
+
+.albus-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+.albus-badge-pro {
+  background: #1d2327;
+  color: #fff;
+}
+
+.albus-pro-hint {
+  font-size: 12px;
+  color: #646970;
+}
+
+.albus-pro-hint a {
+  font-weight: 600;
+}
+
+.albus-card .debug-raw {
+  color: #646970;
+  text-decoration: none;
+  box-shadow: none;
+  padding: 0 4px;
+}
+
+.albus-card .debug-raw:hover {
+  color: #2271b1;
+}
+
+.albus-card:hover {
+  border-color: #8c8f94;
+}
+
+/* Bulk */
+.albus-bulk {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #dcdcde;
+}
+
+.albus-bulk-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.albus-bulk-lock {
+  font-size: 13px;
+  color: #646970;
+}
+
+.albus-bulk .description {
+  margin: 0.5rem 0 0;
 }
 
 /* Tabs */
@@ -28,6 +213,7 @@
   margin: 1rem 0;
   border-bottom: 2px solid #dcdcde;
 }
+
 .albus-tab {
   background: none;
   border: none;
@@ -38,47 +224,37 @@
   color: #646970;
   border-bottom: 2px solid transparent;
   margin-bottom: -2px;
-  transition: all 0.2s;
+  transition: color 0.15s, border-color 0.15s;
 }
+
 .albus-tab:hover {
   color: #135e96;
 }
+
 .albus-tab.active {
   color: #2271b1;
   border-bottom-color: #2271b1;
 }
 
-/* Actions */
-.albus-actions {
-  margin: 1rem 0;
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-/* Progress Bar */
+/* Progress */
 .albus-progress-bar {
   width: 100%;
-  height: 30px;
+  height: 24px;
   background: #f0f0f1;
   border-radius: 4px;
   overflow: hidden;
-  position: relative;
 }
+
 .albus-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #2271b1, #135e96);
+  background: #2271b1;
   width: 0%;
   transition: width 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-weight: 500;
 }
+
 .albus-progress-text {
   margin-top: 8px;
-  font-size: 14px;
+  font-size: 13px;
   color: #646970;
 }
 
@@ -90,22 +266,24 @@
   top: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: rgba(0, 0, 0, 0.65);
   display: flex;
   align-items: center;
   justify-content: center;
 }
+
 .albus-modal-content {
   background-color: #fff;
-  padding: 20px;
+  padding: 20px 24px;
   border-radius: 8px;
   max-width: 900px;
   width: 90%;
   max-height: 80vh;
   overflow: auto;
   position: relative;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
+
 .albus-modal-close {
   position: absolute;
   right: 15px;
@@ -115,9 +293,11 @@
   color: #aaa;
   cursor: pointer;
 }
+
 .albus-modal-close:hover {
   color: #000;
 }
+
 .albus-preview-info {
   background: #f0f6fc;
   padding: 12px;
@@ -125,6 +305,7 @@
   margin-bottom: 1rem;
   border-left: 4px solid #2271b1;
 }
+
 .albus-preview-body pre {
   background: #f6f7f7;
   padding: 15px;
@@ -133,11 +314,13 @@
   max-height: 400px;
   border: 1px solid #dcdcde;
 }
+
 .albus-preview-body code {
-  font-family: "Monaco", "Menlo", monospace;
+  font-family: Consolas, Monaco, monospace;
   font-size: 12px;
   line-height: 1.6;
 }
+
 .albus-modal-actions {
   margin-top: 1rem;
   display: flex;
@@ -149,22 +332,38 @@
 .albus-success,
 .albus-error {
   width: 100%;
-  margin-top: 8px;
-  padding: 8px 12px;
+  margin-top: 10px;
+  padding: 10px 12px;
   border-radius: 4px;
 }
+
 .albus-success {
-  background: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
-}
-.albus-error {
-  background: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
+  background: #edfaef;
+  color: #1e5b2a;
+  border: 1px solid #68de7c;
 }
 
-/* Backup items */
+.albus-success .button {
+  margin-top: 6px;
+  margin-right: 4px;
+}
+
+.albus-error {
+  background: #fcf0f1;
+  color: #8a2424;
+  border: 1px solid #f0b7b7;
+}
+
+/* Backups */
+.backups-header {
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .albus-backup-item {
   background: #fff;
   border: 1px solid #ccd0d4;
@@ -174,27 +373,19 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
+
 .albus-backup-badge {
   display: inline-block;
-  padding: 4px 8px;
+  padding: 3px 8px;
   background: #f0f0f1;
   border-radius: 3px;
   font-size: 12px;
   margin-left: 4px;
 }
 
-/* Additional UI improvements */
-.albus h1 {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.albus h1::before {
-  content: "🎨";
-  font-size: 32px;
-}
-
+/* Info / warning boxes (Help & Backups) */
 .albus-info-box {
   background: #f0f6fc;
   padding: 15px;
@@ -202,9 +393,11 @@
   margin-bottom: 1rem;
   border-left: 4px solid #2271b1;
 }
+
 .albus-info-box h3 {
   margin-top: 0;
 }
+
 .albus-info-box ul {
   margin-bottom: 0;
 }
@@ -214,30 +407,7 @@
   padding: 15px;
   border-radius: 6px;
   margin-bottom: 1rem;
-  border-left: 4px solid #f0b429;
-}
-
-.albus-card:hover {
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: box-shadow 0.2s;
-}
-
-button[disabled] {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* PRO feature styling */
-.pro-feature {
-  position: relative;
-  opacity: 0.7;
-  cursor: help !important;
-  background: #f0f0f1 !important;
-  border-color: #dcdcde !important;
-  color: #646970 !important;
-}
-.pro-feature:hover {
-  opacity: 0.8;
+  border-left: 4px solid #dba617;
 }
 
 .albus-stats {
@@ -246,6 +416,7 @@ button[disabled] {
   margin: 1rem 0;
   flex-wrap: wrap;
 }
+
 .albus-stat-card {
   background: #fff;
   border: 1px solid #ccd0d4;
@@ -254,71 +425,59 @@ button[disabled] {
   min-width: 150px;
   flex: 1;
 }
+
 .albus-stat-number {
-  font-size: 32px;
-  font-weight: bold;
+  font-size: 28px;
+  font-weight: 700;
   color: #2271b1;
   display: block;
 }
+
 .albus-stat-label {
-  font-size: 14px;
+  font-size: 13px;
   color: #646970;
   margin-top: 4px;
 }
 
-/* Responsive */
-@media (max-width: 782px) {
-  .albus-card {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .albus-card .albus-actions-group {
-    width: 100%;
-    margin-top: 10px;
-  }
-  .albus-modal-content {
-    width: 95%;
-    max-width: 100%;
-  }
-}
-
-/* Animations */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.albus-card,
-.albus-backup-item {
-  animation: fadeIn 0.3s ease-out;
-}
-
-.albus-success {
-  animation: fadeIn 0.5s ease-out;
+button[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* Loading spinner */
 .albus-loading {
   display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid #f3f3f3;
-  border-top: 2px solid #2271b1;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #dcdcde;
+  border-top-color: #2271b1;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: albus-spin 0.8s linear infinite;
 }
 
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
+@keyframes albus-spin {
+  to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 782px) {
+  .albus-toolbar-main {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .albus .albus-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .albus .albus-card-actions {
+    width: 100%;
+  }
+
+  .albus-modal-content {
+    width: 95%;
+    max-width: 100%;
   }
 }
